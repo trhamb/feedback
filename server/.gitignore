@@ -1,0 +1,4 @@
+server/db/*.db
+server/db/*.db-journal
+server/db/*.db-shm
+server/db/*.db-wal
