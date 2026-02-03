@@ -1,7 +1,11 @@
 {
   "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "dotenv": "^16.4.5",
     "body-parser": "^2.2.2",
     "express": "^5.2.1",
     "mysql": "^2.18.1",

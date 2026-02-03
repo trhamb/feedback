@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import Database from 'better-sqlite3';
 import crypto from 'crypto';
@@ -8,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Secret key for signing feedback links
 // IMPORTANT: Change this to a secure random string in production!
@@ -196,5 +197,5 @@ app.post("/api/feedback", (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:3001`);
-})
+    console.log(`Server running on http://localhost:${PORT}`);
+});
