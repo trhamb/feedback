@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Manual Feedback - SSW Feedback Hub</title>
+    <meta name="description" content="Submit feedback on behalf of attendees">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../css/feedback-form.css">
+</head>
+<body>
+    <div class="page-container">
+        <a href="/" class="back-link">&larr; Back to Home</a>
+        
+        <header class="page-header">
+            <img src="../img/sswlogo.png" alt="SSW Logo">
+            <h1>Manual Feedback Entry</h1>
+            <p>Enter feedback on behalf of an attendee</p>
+        </header>
+        
+        <div id="feedback-container"></div>
+    </div>
+
+    <script src="../js/feedback-form.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = new FeedbackForm('feedback-container', {
+                showEventInput: true,
+                onSuccess: function(data) {
+                    this.showMessage('Feedback submitted successfully! Ready for next entry.', 'success');
+                },
+                onError: function(error) {
+                    this.showMessage(error, 'error');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

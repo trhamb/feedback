@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Event Feedback - SSW Feedback Hub</title>
+    <meta name="description" content="Share your feedback about the event">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../css/feedback-form.css">
+    <style>
+        /* Mobile First */
+        .loading {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #666;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 36px;
+            height: 36px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #00B2F5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 0.75rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-state,
+        .success-state {
+            text-align: center;
+            padding: 2rem 1.25rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .error-state h2 {
+            color: #dc3545;
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .error-state p,
+        .success-state p {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .event-description {
+            background: #f8f9fa;
+            padding: 0.875rem;
+            border-radius: 8px;
+            margin-bottom: 1.25rem;
+            color: #555;
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+        .success-state h2 {
+            color: #28a745;
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .success-icon {
+            font-size: 3rem;
+            margin-bottom: 0.75rem;
+            color: #28a745;
+        }
+
+        /* Tablet and up */
+        @media (min-width: 600px) {
+            .loading {
+                padding: 3rem;
+            }
+            .loading-spinner {
+                width: 40px;
+                height: 40px;
+                border-width: 4px;
+                margin-bottom: 1rem;
+            }
+            .error-state,
+            .success-state {
+                padding: 3rem;
+            }
+            .error-state h2,
+            .success-state h2 {
+                font-size: 1.5rem;
+                margin-bottom: 1rem;
+            }
+            .error-state p,
+            .success-state p {
+                font-size: 1rem;
+            }
+            .event-description {
+                padding: 1rem;
+                margin-bottom: 1.5rem;
+                font-size: 1rem;
+            }
+            .success-icon {
+                font-size: 4rem;
+                margin-bottom: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="page-header">
+            <img src="../img/sswlogo.png" alt="SSW Logo">
+            <h1 id="page-title">Event Feedback</h1>
+            <p id="page-subtitle">Share your experience with us</p>
+        </header>
+        
+        <div id="content-area">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading event details...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/feedback-form.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const contentArea = document.getElementById('content-area');
+            const pageTitle = document.getElementById('page-title');
+            const pageSubtitle = document.getElementById('page-subtitle');
+            
+            // Get event name and token from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const eventName = urlParams.get('name');
+            const token = urlParams.get('token');
+            
+            if (!eventName) {
+                showError('No Event Specified', 'Please use a valid event feedback link.');
+                return;
+            }
+            
+            if (!token) {
+                showError('Invalid Link', 'This feedback link is not valid. Please request a new link.');
+                return;
+            }
+            
+            // Update page header
+            pageTitle.textContent = eventName;
+            pageSubtitle.textContent = 'We value your feedback!';
+            document.title = `${eventName} - Feedback`;
+            
+            // Render feedback form
+            contentArea.innerHTML = '<div id="feedback-container"></div>';
+            
+            // Initialize form with event name pre-filled and token for verification
+            const form = new FeedbackForm('feedback-container', {
+                eventName: eventName,
+                token: token, // Include token for server-side verification
+                showEventInput: false,
+                onSuccess: function(data) {
+                    showSuccess();
+                },
+                onError: function(error) {
+                    this.showMessage(error, 'error');
+                }
+            });
+            
+            function showError(title, message) {
+                contentArea.innerHTML = `
+                    <div class="error-state">
+                        <h2>${title}</h2>
+                        <p>${message}</p>
+                    </div>
+                `;
+            }
+            
+            function showSuccess() {
+                contentArea.innerHTML = `
+                    <div class="success-state">
+                        <div class="success-icon">✓</div>
+                        <h2>Thank You!</h2>
+                        <p>Your feedback has been submitted successfully.</p>
+                        <p>We appreciate you taking the time to share your experience.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

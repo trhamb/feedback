@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Generate Feedback Link - SSW Feedback Hub</title>
+    <meta name="description" content="Generate a shareable feedback link for an event">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../css/feedback-form.css">
+    <style>
+        .generator-form {
+            background: white;
+            padding: 1.25rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-group input[type="text"]:focus {
+            outline: none;
+            border-color: #00B2F5;
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 0.875rem;
+            background-color: #00B2F5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .generate-btn:hover {
+            background-color: #0099d4;
+        }
+
+        .generate-btn:disabled {
+            background-color: #999;
+            cursor: not-allowed;
+        }
+
+        .result-section {
+            display: none;
+            margin-top: 1.5rem;
+            padding: 1.25rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .result-section.visible {
+            display: block;
+        }
+
+        .result-section h3 {
+            margin-bottom: 0.75rem;
+            color: #333;
+            font-size: 1rem;
+        }
+
+        .link-container {
+            display: flex;
+            gap: 0.5rem;
+            flex-direction: column;
+        }
+
+        .link-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            background: white;
+            word-break: break-all;
+        }
+
+        .copy-btn {
+            padding: 0.75rem 1rem;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background-color: #218838;
+        }
+
+        .copy-btn.copied {
+            background-color: #6c757d;
+        }
+
+        .test-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: #00B2F5;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .test-link:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            color: #dc3545;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        @media (min-width: 600px) {
+            .generator-form {
+                padding: 1.75rem;
+            }
+
+            .link-container {
+                flex-direction: row;
+            }
+
+            .result-section {
+                padding: 1.5rem;
+            }
+        }
+
+        @media (min-width: 900px) {
+            .generator-form {
+                padding: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <a href="/" class="back-link">&larr; Back to Home</a>
+        
+        <header class="page-header">
+            <img src="../img/sswlogo.png" alt="SSW Logo">
+            <h1>Generate Feedback Link</h1>
+            <p>Create a shareable link for collecting event feedback</p>
+        </header>
+        
+        <div class="generator-form">
+            <form id="generator-form">
+                <div class="form-group">
+                    <label for="event-name">Event Name</label>
+                    <input type="text" id="event-name" name="event_name" 
+                           placeholder="e.g., Tech Meetup February 2026" required>
+                </div>
+                
+                <button type="submit" class="generate-btn" id="generate-btn">Generate Link</button>
+                <div id="error-message" class="error-message"></div>
+            </form>
+            
+            <div id="result-section" class="result-section">
+                <h3>Shareable Feedback Link:</h3>
+                <div class="link-container">
+                    <input type="text" id="generated-link" class="link-input" readonly>
+                    <button type="button" id="copy-btn" class="copy-btn">Copy Link</button>
+                </div>
+                <a href="#" id="test-link" class="test-link" target="_blank">Test this link &rarr;</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('generator-form');
+            const eventNameInput = document.getElementById('event-name');
+            const generateBtn = document.getElementById('generate-btn');
+            const errorMessage = document.getElementById('error-message');
+            const resultSection = document.getElementById('result-section');
+            const generatedLinkInput = document.getElementById('generated-link');
+            const copyBtn = document.getElementById('copy-btn');
+            const testLink = document.getElementById('test-link');
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const eventName = eventNameInput.value.trim();
+                if (!eventName) {
+                    showError('Please enter an event name');
+                    return;
+                }
+
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Generating...';
+                errorMessage.textContent = '';
+
+                try {
+                    const response = await fetch('/api/generate-link', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event_name: eventName })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        // Build full URL
+                        const fullUrl = window.location.origin + data.link;
+                        generatedLinkInput.value = fullUrl;
+                        testLink.href = data.link;
+                        resultSection.classList.add('visible');
+                        copyBtn.textContent = 'Copy Link';
+                        copyBtn.classList.remove('copied');
+                    } else {
+                        showError(data.error || 'Failed to generate link');
+                    }
+                } catch (error) {
+                    showError('Network error. Please try again.');
+                } finally {
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate Link';
+                }
+            });
+
+            copyBtn.addEventListener('click', async function() {
+                try {
+                    await navigator.clipboard.writeText(generatedLinkInput.value);
+                    copyBtn.textContent = 'Copied!';
+                    copyBtn.classList.add('copied');
+                    
+                    setTimeout(() => {
+                        copyBtn.textContent = 'Copy Link';
+                        copyBtn.classList.remove('copied');
+                    }, 2000);
+                } catch (error) {
+                    // Fallback for older browsers
+                    generatedLinkInput.select();
+                    document.execCommand('copy');
+                    copyBtn.textContent = 'Copied!';
+                    copyBtn.classList.add('copied');
+                }
+            });
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                resultSection.classList.remove('visible');
+            }
+        });
+    </script>
+</body>
+</html>
