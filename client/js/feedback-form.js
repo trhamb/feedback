@@ -134,7 +134,8 @@ class FeedbackForm {
                 body: JSON.stringify({
                     event_name: eventName,
                     rating: rating,
-                    comment: comment || null
+                    comment: comment || null,
+                    ...(this.options.token && { token: this.options.token })
                 })
             });
 

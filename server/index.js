@@ -20,6 +20,24 @@ app.use(express.static(path.join(__dirname, "../client")));
 
 const db = new Database(path.join(__dirname, 'db/app.db'));
 
+// Ensure ip_hash column exists (for existing databases)
+const tableInfo = db.prepare("PRAGMA table_info(feedback)").all();
+const hasIpHash = tableInfo.some((col) => col.name === 'ip_hash');
+if (!hasIpHash) {
+    db.prepare('ALTER TABLE feedback ADD COLUMN ip_hash TEXT').run();
+}
+
+// Hash client IP for duplicate check (we don't store raw IPs)
+function hashIp(ip) {
+    return crypto.createHash('sha256').update(ip + LINK_SECRET).digest('hex').substring(0, 32);
+}
+
+function getClientIp(req) {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded ? (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',')[0].trim() : req.ip;
+    return ip || 'unknown';
+}
+
 // Generate a token for an event name
 function generateToken(eventName) {
     return crypto.createHmac('sha256', LINK_SECRET)
@@ -68,9 +86,10 @@ app.post("/api/feedback", (req, res) => {
         return res.status(400).json({ error: "rating must be between 1 and 5" });
     }
     
-    // Verify token for external submissions (token will be present in URL-based submissions)
-    // Manual submissions from staff don't need a token
-    if (token !== undefined) {
+    const isLinkSubmission = token !== undefined;
+
+    // Verify token for external (link) submissions
+    if (isLinkSubmission) {
         try {
             if (!verifyToken(event_name, token)) {
                 return res.status(403).json({ error: "Invalid or expired feedback link" });
@@ -78,11 +97,22 @@ app.post("/api/feedback", (req, res) => {
         } catch (error) {
             return res.status(403).json({ error: "Invalid or expired feedback link" });
         }
+
+        // Prevent duplicate submissions: same event + same IP within 24 hours
+        const ip = getClientIp(req);
+        const ipHash = hashIp(ip);
+        const existing = db.prepare(
+            "SELECT 1 FROM feedback WHERE event_name = ? AND ip_hash = ? AND created_at > datetime('now', '-24 hours') LIMIT 1"
+        ).get(event_name, ipHash);
+        if (existing) {
+            return res.status(403).json({ error: "You have already submitted feedback for this event." });
+        }
     }
-    
+
     try {
-        const stmt = db.prepare("INSERT INTO feedback (event_name, rating, comment) VALUES (?, ?, ?)");
-        const result = stmt.run(event_name, rating, comment || null);
+        const ipHash = isLinkSubmission ? hashIp(getClientIp(req)) : null;
+        const stmt = db.prepare("INSERT INTO feedback (event_name, rating, comment, ip_hash) VALUES (?, ?, ?, ?)");
+        const result = stmt.run(event_name, rating, comment || null, ipHash);
         res.json({ success: true, id: result.lastInsertRowid });
     } catch (error) {
         res.status(500).json({ error: "Failed to save feedback" });
