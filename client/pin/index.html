@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Enter PIN - SSW Feedback Hub</title>
+    <meta name="description" content="Enter PIN to access the Feedback Hub">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../css/feedback-form.css">
+    <style>
+        .pin-form-wrap {
+            max-width: 320px;
+            margin: 0 auto;
+        }
+        .pin-form .form-group input {
+            text-align: center;
+            letter-spacing: 0.25em;
+            font-size: 1.25rem;
+        }
+        .pin-error {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+            text-align: center;
+        }
+        .pin-form .submit-btn {
+            width: 100%;
+            padding: 0.875rem;
+            background-color: #00B2F5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .pin-form .submit-btn:hover {
+            background-color: #0099d4;
+        }
+        .pin-form .submit-btn:disabled {
+            background-color: #999;
+            cursor: not-allowed;
+        }
+        #pin-input {
+            text-align: center;
+            letter-spacing: 0.25em;
+            font-size: 1.25rem;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="page-header">
+            <img src="../img/sswlogo.png" alt="SSW Logo">
+            <h1>Feedback Hub</h1>
+            <p>Enter PIN to continue</p>
+        </header>
+
+        <div class="pin-form-wrap">
+            <form id="pin-form" class="pin-form feedback-form">
+                <div class="form-group">
+                    <label for="pin-input">PIN</label>
+                    <input type="password" id="pin-input" name="pin" inputmode="numeric" autocomplete="off"
+                           placeholder="••••" required autofocus>
+                </div>
+                <button type="submit" class="submit-btn" id="submit-btn">Continue</button>
+                <p id="pin-error" class="pin-error" aria-live="polite"></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('pin-form');
+            const pinInput = document.getElementById('pin-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const errorEl = document.getElementById('pin-error');
+
+            const params = new URLSearchParams(window.location.search);
+            const redirect = params.get('redirect') || '/';
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                errorEl.textContent = '';
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Checking…';
+
+                try {
+                    const res = await fetch('/api/verify-pin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pin: pinInput.value.trim(), redirect: redirect })
+                    });
+                    const data = await res.json();
+
+                    if (res.ok && data.success) {
+                        window.location.href = data.redirect || '/';
+                        return;
+                    }
+                    errorEl.textContent = data.error || 'Incorrect PIN. Please try again.';
+                    pinInput.select();
+                    pinInput.focus();
+                } catch (err) {
+                    errorEl.textContent = 'Something went wrong. Please try again.';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Continue';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

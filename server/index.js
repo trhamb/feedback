@@ -15,7 +15,83 @@ const PORT = 3001;
 // You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 const LINK_SECRET = process.env.LINK_SECRET || 'change-this-secret-in-production-abc123';
 
+// PIN to access hub options (home, manual form, link generator). Set FEEDBACK_HUB_PIN in production.
+const HUB_PIN = process.env.FEEDBACK_HUB_PIN || '1234';
+const PIN_COOKIE_NAME = 'pin_verified';
+const PIN_COOKIE_MAX_AGE_HOURS = 24;
+
+function signPinCookie(timestamp) {
+    return crypto.createHmac('sha256', LINK_SECRET).update(String(timestamp)).digest('hex');
+}
+
+function verifyPinCookie(value) {
+    if (!value || typeof value !== 'string') return false;
+    const [timestamp, sig] = value.split('.');
+    if (!timestamp || !sig) return false;
+    const ageHours = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60);
+    if (ageHours < 0 || ageHours > PIN_COOKIE_MAX_AGE_HOURS) return false;
+    const expected = signPinCookie(timestamp);
+    return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+function getPinCookie(req) {
+    const raw = req.headers.cookie;
+    if (!raw) return null;
+    const part = raw.split(';').map((s) => s.trim()).find((s) => s.startsWith(PIN_COOKIE_NAME + '='));
+    if (!part) return null;
+    try {
+        return decodeURIComponent(part.slice(PIN_COOKIE_NAME.length + 1));
+    } catch {
+        return null;
+    }
+}
+
+function isProtectedGetPath(req) {
+    if (req.method !== 'GET') return false;
+    const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
+    return norm === '/' || norm === '/manual' || norm === '/generate';
+}
+
 app.use(express.json());
+
+// PIN verification endpoint (no cookie required)
+app.post('/api/verify-pin', (req, res) => {
+    const { pin } = req.body || {};
+    let redirect = (req.body && req.body.redirect) || '/';
+    // Only allow same-origin path redirects (no protocol/host)
+    if (redirect.startsWith('http:') || redirect.startsWith('https:') || redirect.startsWith('//')) {
+        redirect = '/';
+    }
+    if (!redirect.startsWith('/')) redirect = '/';
+    if (String(pin) === String(HUB_PIN)) {
+        const timestamp = Date.now().toString();
+        const signature = signPinCookie(timestamp);
+        const cookieValue = `${timestamp}.${signature}`;
+        res.cookie(PIN_COOKIE_NAME, cookieValue, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: PIN_COOKIE_MAX_AGE_HOURS * 60 * 60 * 1000,
+            path: '/',
+        });
+        return res.json({ success: true, redirect });
+    }
+    return res.status(401).json({ success: false, error: 'Incorrect PIN' });
+});
+
+// Protect hub pages and generate API: require valid PIN cookie
+app.use((req, res, next) => {
+    const hasValidPin = verifyPinCookie(getPinCookie(req));
+    if (isProtectedGetPath(req) && !hasValidPin) {
+        const redirectUrl = '/pin/?redirect=' + encodeURIComponent(req.originalUrl || '/');
+        return res.redirect(redirectUrl);
+    }
+    if (req.method === 'POST' && req.path === '/api/generate-link' && !hasValidPin) {
+        return res.status(403).json({ error: 'PIN required' });
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, "../client")));
 
 const db = new Database(path.join(__dirname, 'db/app.db'));
