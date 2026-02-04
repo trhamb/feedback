@@ -2,7 +2,7 @@
   "name": "feedback",
   "private": true,
   "scripts": {
-    "build": "cd server && npm install",
+    "build": "cd server && npm install && node db/setup.js",
     "start": "cd server && npm start"
   }
 }
