@@ -33,10 +33,10 @@ For “I want a link to show people quickly,” a **hosted service** is usually 
 4. **Configure the service:**
    - **Name:** e.g. `ssw-feedback` (your choice).
    - **Region:** pick the one closest to you.
-   - **Root Directory:** set to **`server`** (so Render uses the Node app inside `server/`).
+   - **Root Directory:** leave **blank** (use the repo root so both `client/` and `server/` are available; the app serves the client from `../client`).
    - **Runtime:** Node.
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start` (runs `node index.js`).
+   - **Build Command:** `npm run build`
+   - **Start Command:** `npm start`
 
 5. **Environment variables** (Environment tab / “Add Environment Variable”):
    - **`LINK_SECRET`** – a random secret (generate one:  
