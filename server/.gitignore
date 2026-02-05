@@ -1,5 +1,18 @@
-# server/db/*.db
-# server/db/*.db-journal
-# server/db/*.db-shm
-# server/db/*.db-wal
-server/node_modules
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# OS / editor noise
+.DS_Store
+.vscode/
