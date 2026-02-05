@@ -146,22 +146,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Dashboard page protection: require staff session for /dashboard (not /dashboard/login)
-app.use((req, res, next) => {
-    if (req.method !== 'GET') return next();
-    const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
-    if (norm !== '/dashboard' && norm !== '/dashboard/') return next();
-    if (req.path.startsWith('/dashboard/login')) return next();
-    if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
-    const staffId = verifyStaffCookie(getStaffCookie(req));
-    if (!staffId) {
-        return res.redirect('/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/dashboard/'));
-    }
-    next();
-});
-
-app.use(express.static(path.join(__dirname, "../client")));
-
+// Open DB early so dashboard protection can validate staff exists
 const db = new Database(path.join(__dirname, 'db/app.db'));
 
 // Ensure ip_hash column exists (for existing databases)
@@ -182,6 +167,35 @@ try {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
 }
+
+// Returns staffId only if cookie is valid AND staff still exists in DB (e.g. after re-clone)
+function getAuthenticatedStaffId(req) {
+    const staffId = verifyStaffCookie(getStaffCookie(req));
+    if (!staffId) return null;
+    const user = db.prepare('SELECT id FROM staff WHERE id = ?').get(staffId);
+    return user ? staffId : null;
+}
+
+function clearStaffCookie(res) {
+    res.clearCookie(STAFF_COOKIE_NAME, { path: '/', httpOnly: true });
+}
+
+// Dashboard page protection: require valid staff session (cookie + user exists in DB)
+app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
+    if (norm !== '/dashboard' && norm !== '/dashboard/') return next();
+    if (req.path.startsWith('/dashboard/login')) return next();
+    if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
+    const staffId = getAuthenticatedStaffId(req);
+    if (!staffId) {
+        clearStaffCookie(res);
+        return res.redirect('/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/dashboard/'));
+    }
+    next();
+});
+
+app.use(express.static(path.join(__dirname, "../client")));
 
 // Staff login
 app.post('/api/staff/login', (req, res) => {
@@ -267,8 +281,11 @@ app.post("/api/generate-link", (req, res) => {
 
 // Dashboard: list feedback (staff only)
 app.get("/api/feedback", (req, res) => {
-    const staffId = verifyStaffCookie(getStaffCookie(req));
-    if (!staffId) return res.status(401).json({ error: 'Authentication required' });
+    const staffId = getAuthenticatedStaffId(req);
+    if (!staffId) {
+        clearStaffCookie(res);
+        return res.status(401).json({ error: 'Authentication required' });
+    }
     const rows = db.prepare("SELECT id, event_name, rating, comment, created_at FROM feedback ORDER BY created_at DESC").all();
     res.json(rows);
 });
