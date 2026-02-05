@@ -1,7 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "create-staff": "node scripts/create-staff.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

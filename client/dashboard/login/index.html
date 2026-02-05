@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Staff sign in - SSW Feedback</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../../css/feedback-form.css">
+    <style>
+        .login-form-wrap { max-width: 320px; margin: 0 auto; }
+        .login-form .form-group input { font-size: 1rem; }
+        .login-error { color: #dc3545; font-size: 0.9rem; margin-top: 0.75rem; text-align: center; }
+        .login-form .submit-btn { width: 100%; padding: 0.875rem; background-color: #00B2F5; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        .login-form .submit-btn:hover { background-color: #0099d4; }
+        .login-form .submit-btn:disabled { background-color: #999; cursor: not-allowed; }
+        .back-link { display: inline-block; margin-top: 1rem; color: #00B2F5; text-decoration: none; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header class="page-header">
+            <img src="../../img/sswlogo.png" alt="SSW Logo">
+            <h1>Feedback Dashboard</h1>
+            <p>Staff sign in</p>
+        </header>
+
+        <div class="login-form-wrap">
+            <form id="login-form" class="login-form feedback-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="submit-btn" id="submit-btn">Sign in</button>
+                <p id="login-error" class="login-error" aria-live="polite"></p>
+            </form>
+            <a href="/" class="back-link">← Back to hub</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('login-form');
+            const submitBtn = document.getElementById('submit-btn');
+            const errorEl = document.getElementById('login-error');
+            const params = new URLSearchParams(window.location.search);
+            const redirect = params.get('redirect') || '/dashboard/';
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                errorEl.textContent = '';
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Signing in…';
+
+                try {
+                    const res = await fetch('/api/staff/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: form.username.value.trim(),
+                            password: form.password.value
+                        })
+                    });
+                    const data = await res.json();
+
+                    if (res.ok && data.success) {
+                        window.location.href = redirect;
+                        return;
+                    }
+                    errorEl.textContent = data.error || 'Sign in failed. Please try again.';
+                    form.password.focus();
+                } catch (err) {
+                    errorEl.textContent = 'Something went wrong. Please try again.';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Sign in';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

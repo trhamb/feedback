@@ -21,6 +21,12 @@ const HUB_PIN = process.env.FEEDBACK_HUB_PIN || '1234';
 const PIN_COOKIE_NAME = 'pin_verified';
 const PIN_COOKIE_MAX_AGE_HOURS = 24;
 
+// Staff dashboard session (signed cookie)
+const STAFF_COOKIE_NAME = 'staff_session';
+const STAFF_SESSION_MAX_AGE_HOURS = 24;
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_KEYLEN = 64;
+
 function signPinCookie(timestamp) {
     return crypto.createHmac('sha256', LINK_SECRET).update(String(timestamp)).digest('hex');
 }
@@ -51,6 +57,53 @@ function isProtectedGetPath(req) {
     if (req.method !== 'GET') return false;
     const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
     return norm === '/' || norm === '/manual' || norm === '/generate';
+}
+
+// --- Staff session helpers ---
+function signStaffSession(payload) {
+    return crypto.createHmac('sha256', LINK_SECRET).update(payload).digest('hex');
+}
+
+function verifyStaffCookie(value) {
+    if (!value || typeof value !== 'string') return null;
+    const [staffId, timestamp, sig] = value.split('.');
+    if (!staffId || !timestamp || !sig) return null;
+    const ageHours = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60);
+    if (ageHours < 0 || ageHours > STAFF_SESSION_MAX_AGE_HOURS) return null;
+    const payload = `${staffId}.${timestamp}`;
+    const expected = signStaffSession(payload);
+    try {
+        if (!crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'))) return null;
+    } catch {
+        return null;
+    }
+    return parseInt(staffId, 10);
+}
+
+function getStaffCookie(req) {
+    const raw = req.headers.cookie;
+    if (!raw) return null;
+    const part = raw.split(';').map((s) => s.trim()).find((s) => s.startsWith(STAFF_COOKIE_NAME + '='));
+    if (!part) return null;
+    try {
+        return decodeURIComponent(part.slice(STAFF_COOKIE_NAME.length + 1));
+    } catch {
+        return null;
+    }
+}
+
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16);
+    const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, 'sha512');
+    return salt.toString('hex') + ':' + hash.toString('hex');
+}
+
+function verifyPassword(password, stored) {
+    const [saltHex, hashHex] = stored.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = Buffer.from(saltHex, 'hex');
+    const hash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, 'sha512');
+    return crypto.timingSafeEqual(hash, Buffer.from(hashHex, 'hex'));
 }
 
 app.use(express.json());
@@ -93,6 +146,20 @@ app.use((req, res, next) => {
     next();
 });
 
+// Dashboard page protection: require staff session for /dashboard (not /dashboard/login)
+app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
+    if (norm !== '/dashboard' && norm !== '/dashboard/') return next();
+    if (req.path.startsWith('/dashboard/login')) return next();
+    if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
+    const staffId = verifyStaffCookie(getStaffCookie(req));
+    if (!staffId) {
+        return res.redirect('/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/dashboard/'));
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, "../client")));
 
 const db = new Database(path.join(__dirname, 'db/app.db'));
@@ -103,6 +170,57 @@ const hasIpHash = tableInfo.some((col) => col.name === 'ip_hash');
 if (!hasIpHash) {
     db.prepare('ALTER TABLE feedback ADD COLUMN ip_hash TEXT').run();
 }
+
+// Ensure staff table exists (run schema if needed)
+try {
+    db.prepare("SELECT 1 FROM staff LIMIT 1").get();
+} catch {
+    db.exec(`CREATE TABLE IF NOT EXISTS staff (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+}
+
+// Staff login
+app.post('/api/staff/login', (req, res) => {
+    const { username, password } = req.body || {};
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Username and password are required' });
+    }
+    const user = db.prepare('SELECT id, username, password_hash FROM staff WHERE username = ?').get(username.trim());
+    if (!user || !verifyPassword(password, user.password_hash)) {
+        return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    const timestamp = Date.now().toString();
+    const payload = `${user.id}.${timestamp}`;
+    const sig = signStaffSession(payload);
+    const cookieValue = `${payload}.${sig}`;
+    res.cookie(STAFF_COOKIE_NAME, cookieValue, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: STAFF_SESSION_MAX_AGE_HOURS * 60 * 60 * 1000,
+        path: '/',
+    });
+    return res.json({ success: true, username: user.username });
+});
+
+// Staff logout
+app.post('/api/staff/logout', (req, res) => {
+    res.clearCookie(STAFF_COOKIE_NAME, { path: '/', httpOnly: true });
+    return res.json({ success: true });
+});
+
+// Current staff (for dashboard UI)
+app.get('/api/staff/me', (req, res) => {
+    const staffId = verifyStaffCookie(getStaffCookie(req));
+    if (!staffId) return res.status(401).json({ error: 'Not authenticated' });
+    const user = db.prepare('SELECT id, username, created_at FROM staff WHERE id = ?').get(staffId);
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    return res.json({ id: user.id, username: user.username });
+});
 
 // Hash client IP for duplicate check (we don't store raw IPs)
 function hashIp(ip) {
@@ -147,8 +265,11 @@ app.post("/api/generate-link", (req, res) => {
     res.json({ success: true, link, event_name: name });
 });
 
+// Dashboard: list feedback (staff only)
 app.get("/api/feedback", (req, res) => {
-    const rows = db.prepare("SELECT * FROM feedback ORDER BY created_at DESC").all();
+    const staffId = verifyStaffCookie(getStaffCookie(req));
+    if (!staffId) return res.status(401).json({ error: 'Authentication required' });
+    const rows = db.prepare("SELECT id, event_name, rating, comment, created_at FROM feedback ORDER BY created_at DESC").all();
     res.json(rows);
 });
 

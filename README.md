@@ -1,5 +1,20 @@
 SSW Feedback
 
+## Staff dashboard
+
+Staff can sign in to view all submitted feedback at **/dashboard/**.
+
+- **Create staff accounts** (from the `server` directory):
+  ```bash
+  cd server
+  node scripts/create-staff.js <username> <password>
+  ```
+  You can run this each time you add a new staff member. Usernames must be unique.
+
+- **Sign in:** Open `/dashboard/` (or `/dashboard/login/`). After signing in, you can view all feedback, filter by event, and sign out.
+
+- The list of feedback is only available when signed in; the feedback API is protected by the same session.
+
 ## PIN protection
 
 The hub (home page, Manual Feedback, and Generate Feedback Link) is protected by a PIN so only your team can access those options. Recipients of generated event links do **not** need the PIN—they can submit feedback using the link you send them.

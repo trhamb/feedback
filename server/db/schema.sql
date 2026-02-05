@@ -8,3 +8,11 @@ CREATE TABLE IF NOT EXISTS feedback (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     ip_hash TEXT
 );
+
+-- Staff accounts for dashboard access (create accounts via server/scripts/create-staff.js)
+CREATE TABLE IF NOT EXISTS staff (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
