@@ -16,3 +16,9 @@ CREATE TABLE IF NOT EXISTS staff (
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Settings (hub PIN editable from dashboard)
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

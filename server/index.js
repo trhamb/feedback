@@ -19,8 +19,9 @@ app.set('trust proxy', 1);
 // You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 const LINK_SECRET = process.env.LINK_SECRET || 'change-this-secret-in-production-abc123';
 
-// PIN to access hub options (home, manual form, link generator). Set FEEDBACK_HUB_PIN in production.
-const HUB_PIN = process.env.FEEDBACK_HUB_PIN || '1234';
+// PIN to access hub options (home, manual form, link generator). Read from DB if set; else FEEDBACK_HUB_PIN env.
+let hubPin = process.env.FEEDBACK_HUB_PIN || '1234';
+function getHubPin() { return hubPin; }
 const PIN_COOKIE_NAME = 'pin_verified';
 const PIN_COOKIE_MAX_AGE_HOURS = 24;
 
@@ -129,7 +130,7 @@ app.post('/api/verify-pin', (req, res) => {
         redirect = '/';
     }
     if (!redirect.startsWith('/')) redirect = '/';
-    if (String(pin) === String(HUB_PIN)) {
+    if (String(pin) === String(getHubPin())) {
         const timestamp = Date.now().toString();
         const signature = signPinCookie(timestamp);
         const cookieValue = `${timestamp}.${signature}`;
@@ -180,6 +181,22 @@ try {
         password_hash TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+}
+
+// Settings table for hub PIN (editable from dashboard)
+try {
+    db.prepare("SELECT 1 FROM settings LIMIT 1").get();
+} catch {
+    db.exec(`CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )`);
+}
+const savedPin = db.prepare("SELECT value FROM settings WHERE key = 'hub_pin'").get();
+if (savedPin) {
+    hubPin = savedPin.value;
+} else {
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hub_pin', ?)").run(hubPin);
 }
 
 // Returns staffId only if cookie is valid AND staff still exists in DB (e.g. after re-clone)
@@ -265,6 +282,27 @@ app.post('/api/staff', (req, res) => {
         }
         return res.status(500).json({ error: 'Failed to create staff account' });
     }
+});
+
+// Change hub PIN (staff only, requires current PIN)
+app.post('/api/settings/pin', (req, res) => {
+    const staffId = getAuthenticatedStaffId(req);
+    if (!staffId) {
+        clearStaffCookie(res);
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    const { currentPin, newPin } = req.body || {};
+    if (!currentPin || !newPin || typeof currentPin !== 'string' || typeof newPin !== 'string') {
+        return res.status(400).json({ error: 'Current PIN and new PIN are required' });
+    }
+    const newTrimmed = newPin.trim();
+    if (newTrimmed.length < 4) return res.status(400).json({ error: 'New PIN must be at least 4 characters' });
+    if (String(currentPin) !== String(getHubPin())) {
+        return res.status(401).json({ error: 'Current PIN is incorrect' });
+    }
+    hubPin = newTrimmed;
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hub_pin', ?)").run(newTrimmed);
+    return res.json({ success: true });
 });
 
 // Current staff (for dashboard UI)
