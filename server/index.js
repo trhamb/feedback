@@ -11,6 +11,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
+// Trust X-Forwarded-* when behind nginx/caddy/etc. (needed for correct secure-cookie behavior on VPS)
+app.set('trust proxy', 1);
+
 // Secret key for signing feedback links
 // IMPORTANT: Change this to a secure random string in production!
 // You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -106,6 +109,15 @@ function verifyPassword(password, stored) {
     return crypto.timingSafeEqual(hash, Buffer.from(hashHex, 'hex'));
 }
 
+// Use Secure cookies only when the request is over HTTPS (works with reverse proxy via X-Forwarded-Proto).
+// On VPS over plain HTTP, cookies are sent correctly; over HTTPS they stay Secure.
+function cookieSecure(req) {
+    const proto = req.get('x-forwarded-proto');
+    if (proto === 'https') return true;
+    if (proto === 'http') return false;
+    return req.secure === true;
+}
+
 app.use(express.json());
 
 // PIN verification endpoint (no cookie required)
@@ -123,7 +135,7 @@ app.post('/api/verify-pin', (req, res) => {
         const cookieValue = `${timestamp}.${signature}`;
         res.cookie(PIN_COOKIE_NAME, cookieValue, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
+            secure: cookieSecure(req),
             sameSite: 'lax',
             maxAge: PIN_COOKIE_MAX_AGE_HOURS * 60 * 60 * 1000,
             path: '/',
@@ -148,6 +160,8 @@ app.use((req, res, next) => {
 
 // Open DB early so dashboard protection can validate staff exists
 const db = new Database(path.join(__dirname, 'db/app.db'));
+// If the DB is busy (e.g. many people submitting at once), wait up to 5s instead of failing
+db.pragma('busy_timeout = 5000');
 
 // Ensure ip_hash column exists (for existing databases)
 const tableInfo = db.prepare("PRAGMA table_info(feedback)").all();
@@ -213,7 +227,7 @@ app.post('/api/staff/login', (req, res) => {
     const cookieValue = `${payload}.${sig}`;
     res.cookie(STAFF_COOKIE_NAME, cookieValue, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: cookieSecure(req),
         sameSite: 'lax',
         maxAge: STAFF_SESSION_MAX_AGE_HOURS * 60 * 60 * 1000,
         path: '/',

@@ -1,0 +1,11 @@
+# Dependencies (root has no deps; server deps are in server/node_modules)
+node_modules/
+
+# Local env (server uses server/.env)
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

@@ -93,7 +93,16 @@ For “I want a link to show people quickly,” a **hosted service** is usually 
    NODE_ENV=production
    ```
 
-4. **Run with PM2** (so it restarts on reboot and crashes):
+4. **Create a staff account** (required for the dashboard to work):
+
+   ```bash
+   cd /opt/feedback/server
+   node scripts/create-staff.js your-username your-password
+   ```
+
+   Then sign in at `/dashboard/login/` with that username and password.
+
+5. **Run with PM2** (so it restarts on reboot and crashes):
 
    ```bash
    sudo npm install -g pm2
@@ -102,9 +111,9 @@ For “I want a link to show people quickly,” a **hosted service** is usually 
    pm2 save && pm2 startup
    ```
 
-   Then open `http://YOUR_VPS_IP:3001`. If the firewall allows port 3001, you can share that URL.
+   You can test with `http://YOUR_VPS_IP:3001` (if port 3001 is open), or go straight to nginx + HTTPS below.
 
-5. **Optional: nginx + HTTPS** – so you can use a domain and avoid opening 3001:
+6. **Optional: nginx + HTTPS** – so you can use a domain and avoid opening 3001:
 
    - Point a domain (e.g. `feedback.yourdomain.com`) at the VPS.
    - Install nginx and certbot: `sudo apt install nginx certbot python3-certbot-nginx`
@@ -125,5 +134,63 @@ For “I want a link to show people quickly,” a **hosted service** is usually 
        }
    }
    ```
+
+---
+
+### Deploy to VPS with HTTPS (e.g. feedback.trhamb.com)
+
+Use this when your domain already has an **A record** pointing to the VPS and you want the app on **https://feedback.trhamb.com**.
+
+**SSL / Certbot:** If you wiped the server user or reinstalled the OS, the previous certbot setup is gone (certs and nginx config live under `/etc/`). You need to run nginx + certbot again on this machine. The A record you have is all you need; certbot will issue a certificate for the domain when you run it.
+
+**Order of operations:**
+
+1. **Node and app (same as Option B above)**  
+   Install Node 20, clone the repo (e.g. into `/opt/feedback`), `cd feedback/server`, then:
+   - `npm run build` (installs deps and creates the SQLite DB from `schema.sql`)
+   - Create `server/.env` with `PORT=3001`, `LINK_SECRET`, `FEEDBACK_HUB_PIN`, `NODE_ENV=production`
+   - `node scripts/create-staff.js <username> <password>`
+   - `pm2 start index.js --name feedback-hub` (and `pm2 save && pm2 startup`)
+
+2. **Nginx** – install and add a server block that proxies to the app:
+   ```bash
+   sudo apt update && sudo apt install -y nginx
+   sudo nano /etc/nginx/sites-available/feedback
+   ```
+   Paste (replace with your domain if different):
+   ```nginx
+   server {
+       listen 80;
+       server_name feedback.trhamb.com;
+       location / {
+           proxy_pass http://127.0.0.1:3001;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+   Enable and reload:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/feedback /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+3. **Certbot (HTTPS)** – get a certificate and let certbot adjust nginx:
+   ```bash
+   sudo apt install -y certbot python3-certbot-nginx
+   sudo certbot --nginx -d feedback.trhamb.com
+   ```
+   Follow the prompts (email, agree to terms). Certbot will add SSL and redirect HTTP → HTTPS.
+
+4. **Firewall** – allow HTTP/HTTPS; you can leave 3001 closed (only nginx talks to the app):
+   ```bash
+   sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
+   ```
+
+After that, open **https://feedback.trhamb.com**. PIN page first, then hub; dashboard at **https://feedback.trhamb.com/dashboard/**.
+
+---
 
 **Summary:** For “easiest low-cost way to get a link,” use **Option A** (Railway or Render). If you prefer to use your **VPS**, follow **Option B**; add nginx + certbot when you want a proper domain and HTTPS.

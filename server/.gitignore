@@ -1,5 +1,11 @@
-# server/db/*.db
-# server/db/*.db-journal
-# server/db/*.db-shm
-# server/db/*.db-wal
-server/node_modules
+# Dependencies (install with npm install on deploy)
+node_modules/
+
+# Secrets – create server/.env on the VPS with PORT, LINK_SECRET, FEEDBACK_HUB_PIN, etc.
+.env
+.env.*
+
+# SQLite database and WAL files (created at runtime; do not commit)
+db/*.db
+db/*.db-shm
+db/*.db-wal
