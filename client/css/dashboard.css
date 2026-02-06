@@ -36,6 +36,10 @@
     font-size: 0.9rem;
 }
 
+.dashboard-header #user-name {
+    display: none;
+}
+
 .dashboard-header .logout-btn {
     padding: 0.5rem 1rem;
     background: #555;
@@ -49,6 +53,16 @@
 
 .dashboard-header .logout-btn:hover {
     background: #333;
+}
+
+.dashboard-header .nav-link {
+    color: #00B2F5;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.dashboard-header .nav-link:hover {
+    text-decoration: underline;
 }
 
 .dashboard-toolbar {
@@ -75,6 +89,36 @@
 .dashboard-toolbar select:focus {
     outline: none;
     border-color: #00B2F5;
+}
+
+.btn-download-csv {
+    padding: 0.5rem 1rem;
+    background: #00B2F5;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-download-csv:hover {
+    background: #0099d4;
+}
+
+.btn-download-csv:disabled,
+.btn-download-csv:disabled:hover {
+    background: #bbb;
+    cursor: not-allowed;
+}
+
+.btn-add-staff {
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-add-staff:not(:disabled):hover {
+    background: #0099d4;
 }
 
 .feedback-card {

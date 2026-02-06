@@ -198,7 +198,8 @@ function clearStaffCookie(res) {
 app.use((req, res, next) => {
     if (req.method !== 'GET') return next();
     const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
-    if (norm !== '/dashboard' && norm !== '/dashboard/') return next();
+    const isDashboard = norm === '/dashboard' || norm === '/dashboard/' || norm.startsWith('/dashboard/');
+    if (!isDashboard) return next();
     if (req.path.startsWith('/dashboard/login')) return next();
     if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
     const staffId = getAuthenticatedStaffId(req);
@@ -209,8 +210,7 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.static(path.join(__dirname, "../client")));
-
+// API routes before static – ensures /api/* is handled by these routes
 // Staff login
 app.post('/api/staff/login', (req, res) => {
     const { username, password } = req.body || {};
@@ -239,6 +239,32 @@ app.post('/api/staff/login', (req, res) => {
 app.post('/api/staff/logout', (req, res) => {
     res.clearCookie(STAFF_COOKIE_NAME, { path: '/', httpOnly: true });
     return res.json({ success: true });
+});
+
+// Create new staff (requires authenticated staff)
+app.post('/api/staff', (req, res) => {
+    const staffId = getAuthenticatedStaffId(req);
+    if (!staffId) {
+        clearStaffCookie(res);
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    const { username, password } = req.body || {};
+    if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'Username and password are required' });
+    }
+    const trimmed = username.trim();
+    if (!trimmed) return res.status(400).json({ error: 'Username is required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    try {
+        const passwordHash = hashPassword(password);
+        db.prepare('INSERT INTO staff (username, password_hash) VALUES (?, ?)').run(trimmed, passwordHash);
+        return res.json({ success: true, username: trimmed });
+    } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+            return res.status(409).json({ error: 'A staff member with that username already exists' });
+        }
+        return res.status(500).json({ error: 'Failed to create staff account' });
+    }
 });
 
 // Current staff (for dashboard UI)
@@ -347,6 +373,9 @@ app.post("/api/feedback", (req, res) => {
         res.status(500).json({ error: "Failed to save feedback" });
     }
 });
+
+// Static files last – serve client after API routes
+app.use(express.static(path.join(__dirname, "../client")));
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

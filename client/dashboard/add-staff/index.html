@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Add Staff Member - SSW Feedback</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../../css/dashboard.css">
+    <link rel="stylesheet" href="../../css/feedback-form.css">
+    <style>
+        .add-staff-page { min-height: 100vh; padding: 1rem; }
+        .add-staff-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .add-staff-header h1 { font-size: 1.25rem; color: #333; margin: 0; }
+        .form-wrap { max-width: 400px; margin: 0 auto; }
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 100%; padding: 0.75rem; border: 2px solid #ddd; border-radius: 8px;
+            font-size: 1rem; transition: border-color 0.2s ease;
+        }
+        .form-group input:focus { outline: none; border-color: #00B2F5; }
+        .submit-btn { width: 100%; padding: 0.875rem; background-color: #00B2F5; color: white;
+            border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        .submit-btn:hover { background-color: #0099d4; }
+        .submit-btn:disabled { background-color: #999; cursor: not-allowed; }
+        .form-message { margin-top: 1rem; padding: 0.875rem; border-radius: 8px; font-size: 0.9rem; display: none; }
+        .form-message.success { background-color: #d4edda; color: #155724; display: block; }
+        .form-message.error { background-color: #f8d7da; color: #721c24; display: block; }
+        .back-link { display: inline-block; margin-top: 1rem; color: #00B2F5; text-decoration: none; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+        @media (min-width: 600px) {
+            .add-staff-page { max-width: 600px; margin: 0 auto; padding: 1.5rem; }
+            .add-staff-header h1 { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="add-staff-page dashboard-page">
+        <header class="add-staff-header dashboard-header">
+            <h1>Add Staff Member</h1>
+            <a href="../" class="back-link">← Back to Dashboard</a>
+        </header>
+
+        <div class="form-wrap">
+            <form id="add-staff-form" class="feedback-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="new-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm password</label>
+                    <input type="password" id="confirm-password" name="confirm-password" autocomplete="new-password" required>
+                </div>
+                <button type="submit" class="submit-btn" id="submit-btn">Add Staff Member</button>
+                <p id="form-message" class="form-message" aria-live="polite"></p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const form = document.getElementById('add-staff-form');
+            const submitBtn = document.getElementById('submit-btn');
+            const messageEl = document.getElementById('form-message');
+
+            // Base path for subpath deployment (matches dashboard logic)
+            const base = (function() {
+                const path = window.location.pathname.replace(/\/$/, '');
+                if (path.endsWith('/dashboard/add-staff')) return path.replace(/\/dashboard\/add-staff$/, '');
+                return '';
+            })();
+
+            function redirectToLogin() {
+                window.location.href = base + '/dashboard/login/?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+            }
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                messageEl.className = 'form-message';
+                messageEl.textContent = '';
+
+                const username = form.username.value.trim();
+                const password = form.password.value;
+                const confirm = form['confirm-password'].value;
+
+                if (password !== confirm) {
+                    messageEl.className = 'form-message error';
+                    messageEl.textContent = 'Passwords do not match.';
+                    form['confirm-password'].focus();
+                    return;
+                }
+
+                if (password.length < 6) {
+                    messageEl.className = 'form-message error';
+                    messageEl.textContent = 'Password must be at least 6 characters.';
+                    form.password.focus();
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Adding…';
+                try {
+                    const url = (base || '') + '/api/staff';
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ username, password })
+                    });
+                    let data;
+                    try {
+                        data = await res.json();
+                    } catch (parseErr) {
+                        const text = await res.text();
+                        console.error('API returned non-JSON. Status:', res.status, 'Body:', text.substring(0, 200));
+                        messageEl.className = 'form-message error';
+                        messageEl.textContent = 'Server returned an unexpected response. Is the API running at ' + url + '?';
+                        return;
+                    }
+                    if (res.status === 401) {
+                        redirectToLogin();
+                        return;
+                    }
+                    if (res.ok) {
+                        messageEl.className = 'form-message success';
+                        messageEl.textContent = 'Staff member "' + username + '" created successfully.';
+                        form.reset();
+                    } else {
+                        messageEl.className = 'form-message error';
+                        messageEl.textContent = data.error || 'Failed to create staff member.';
+                    }
+                } catch (err) {
+                    console.error('Add staff error:', err);
+                    messageEl.className = 'form-message error';
+                    messageEl.textContent = err.message === 'Failed to fetch' || err.name === 'TypeError'
+                        ? 'Unable to reach the server. Check that the server is running and the URL is correct.'
+                        : 'Something went wrong. Please try again. (Check console for details.)';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Add Staff Member';
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -12,6 +12,7 @@
         <header class="dashboard-header">
             <h1>Feedback Dashboard</h1>
             <div class="user-bar">
+                <a href="add-staff/" class="btn-download-csv btn-add-staff">Add staff member</a>
                 <span id="user-name">—</span>
                 <button type="button" class="logout-btn" id="logout-btn">Sign out</button>
             </div>
@@ -22,6 +23,7 @@
             <select id="filter-event">
                 <option value="">All events</option>
             </select>
+            <button type="button" class="btn-download-csv" id="download-csv-btn" disabled>Download CSV</button>
         </div>
 
         <div id="content">
@@ -35,6 +37,7 @@
             const userNameEl = document.getElementById('user-name');
             const filterEvent = document.getElementById('filter-event');
             const logoutBtn = document.getElementById('logout-btn');
+            const downloadCsvBtn = document.getElementById('download-csv-btn');
             // If app is served under a subpath (e.g. /feedback/), set base to that path; otherwise leave empty
             const base = (function() {
                 const path = window.location.pathname.replace(/\/$/, '');
@@ -82,16 +85,19 @@
                     ? rows.filter(function(r) { return (r.event_name || '').toLowerCase() === eventFilter; })
                     : rows;
 
+                downloadCsvBtn.disabled = filtered.length === 0;
                 if (filtered.length === 0) {
                     contentEl.innerHTML = '<div class="dashboard-empty"><p>No feedback to show.</p></div>';
                     return;
                 }
 
                 const eventOptions = [...new Set(rows.map(function(r) { return r.event_name || ''; }))].filter(Boolean).sort();
-                const currentSelect = filterEvent.innerHTML;
                 filterEvent.innerHTML = '<option value="">All events</option>' +
                     eventOptions.map(function(ev) { return '<option value="' + ev + '">' + ev + '</option>'; }).join('');
-                if (filterEvent.value !== eventFilter) filterEvent.value = eventFilter;
+                const matchingValue = eventFilter
+                    ? (eventOptions.find(function(ev) { return (ev || '').toLowerCase() === eventFilter; }) || '')
+                    : '';
+                filterEvent.value = matchingValue;
 
                 contentEl.innerHTML = '<div class="feedback-card"><div class="feedback-table-wrap"><table class="feedback-table">' +
                     '<thead><tr><th>Event</th><th>Rating</th><th>Comment</th><th>Date</th></tr></thead><tbody>' +
@@ -122,6 +128,39 @@
 
                 filterEvent.addEventListener('change', function() {
                     if (window._feedbackRows) renderTable(window._feedbackRows);
+                });
+
+                downloadCsvBtn.addEventListener('click', function() {
+                    const rows = window._feedbackRows || [];
+                    const eventFilter = (filterEvent.value || '').toLowerCase();
+                    const filtered = eventFilter
+                        ? rows.filter(function(r) { return (r.event_name || '').toLowerCase() === eventFilter; })
+                        : rows;
+                    if (filtered.length === 0) return;
+                    const headers = ['Event', 'Rating', 'Comment', 'Date'];
+                    const escapeCsv = function(val) {
+                        const s = String(val == null ? '' : val);
+                        if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+                        return s;
+                    };
+                    const csvLines = [headers.map(escapeCsv).join(',')].concat(
+                        filtered.map(function(row) {
+                            return [
+                                escapeCsv(row.event_name),
+                                escapeCsv(row.rating),
+                                escapeCsv(row.comment),
+                                escapeCsv(formatDate(row.created_at))
+                            ].join(',');
+                        })
+                    );
+                    const csv = csvLines.join('\r\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = (eventFilter || 'all-events') + '-feedback.csv';
+                    a.click();
+                    URL.revokeObjectURL(url);
                 });
 
                 try {
