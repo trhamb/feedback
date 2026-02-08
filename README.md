@@ -31,7 +31,7 @@ Should changes be made externally to the application:
 
 Once changes are pushed to the repo, pull to the server. 
 ```
-npm ci --omit=DEV
+npm ci --omit=dev
 pm2 restart name
 ```
 
