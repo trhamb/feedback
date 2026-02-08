@@ -1,10 +1,13 @@
-**SSW Feedback**
+#SSW Feedback
 
-*Running the app*
+##Running the app
+```
+cd server
+npm install
+npm start
+```
 
-`cd server \n
-npm install \n
-npm start`
+
 
 
 
