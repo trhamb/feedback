@@ -2,8 +2,8 @@
 
 *Running the app*
 
-`cd server && 
-npm install && 
+`cd server \n
+npm install \n
 npm start`
 
 
