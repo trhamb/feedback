@@ -1,6 +1,6 @@
-#SSW Feedback
+# SSW Feedback
 
-##Running the app
+## Running the app
 ```
 cd server
 npm install
