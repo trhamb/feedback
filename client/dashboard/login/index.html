@@ -47,7 +47,11 @@
             const submitBtn = document.getElementById('submit-btn');
             const errorEl = document.getElementById('login-error');
             const params = new URLSearchParams(window.location.search);
-            const redirect = params.get('redirect') || '/dashboard/';
+            let redirect = params.get('redirect') || '/dashboard/';
+            // Only allow same-origin relative paths (prevent open redirect)
+            if (!redirect.startsWith('/') || redirect.startsWith('//')) {
+                redirect = '/dashboard/';
+            }
 
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();

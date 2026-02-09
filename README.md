@@ -11,6 +11,24 @@ A simple app to easily collect feedback after SSW events.
 ## Management
 Should one need a refresher on how this is set-up:
 
+### Configuration (LINK_SECRET)
+The app needs a secret for signing feedback links and staff sessions. **In production the server will not start without it.**
+
+**Option A – `.env` file (recommended)**  
+On the server, create `server/.env` (copy from `server/.env.example`). Add a line:
+```bash
+LINK_SECRET=your-generated-secret-here
+```
+Generate a value with:  
+`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+**Option B – PM2 / process manager**  
+Set the variable when starting the process, e.g. with PM2 ecosystem:
+```javascript
+env: { LINK_SECRET: 'your-generated-secret-here', NODE_ENV: 'production' }
+```
+Or in the shell before starting: `export LINK_SECRET=...` then `pm2 start ...`
+
 ### Running the app
 ```
 cd server

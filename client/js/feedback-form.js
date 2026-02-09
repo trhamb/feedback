@@ -3,6 +3,12 @@
  * Provides star rating and form submission functionality
  */
 
+function escapeHtmlAttr(str) {
+    if (str == null) return '';
+    const s = String(str);
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 class FeedbackForm {
     constructor(containerId, options = {}) {
         this.container = document.getElementById(containerId);
@@ -31,12 +37,12 @@ class FeedbackForm {
                     <div class="form-group">
                         <label for="event-name">Event Name</label>
                         <input type="text" id="event-name" name="event_name" 
-                               value="${this.options.eventName || ''}" 
+                               value="${escapeHtmlAttr(this.options.eventName || '')}" 
                                ${this.options.eventName ? 'readonly' : ''} 
                                required>
                     </div>
                 ` : `
-                    <input type="hidden" id="event-name" name="event_name" value="${this.options.eventName || ''}">
+                    <input type="hidden" id="event-name" name="event_name" value="${escapeHtmlAttr(this.options.eventName || '')}">
                 `}
                 
                 <div class="form-group">

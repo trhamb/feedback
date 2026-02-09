@@ -115,6 +115,12 @@
                 return isNaN(d.getTime()) ? createdAt : d.toLocaleString();
             }
 
+            function escapeHtml(str) {
+                if (str == null) return '';
+                const s = String(str);
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
             function renderTable(rows) {
                 const eventFilter = (filterEvent.value || '').toLowerCase();
                 const filtered = eventFilter
@@ -129,7 +135,7 @@
 
                 const eventOptions = [...new Set(rows.map(function(r) { return r.event_name || ''; }))].filter(Boolean).sort();
                 filterEvent.innerHTML = '<option value="">All events</option>' +
-                    eventOptions.map(function(ev) { return '<option value="' + ev + '">' + ev + '</option>'; }).join('');
+                    eventOptions.map(function(ev) { return '<option value="' + escapeHtml(ev) + '">' + escapeHtml(ev) + '</option>'; }).join('');
                 const matchingValue = eventFilter
                     ? (eventOptions.find(function(ev) { return (ev || '').toLowerCase() === eventFilter; }) || '')
                     : '';
@@ -139,10 +145,10 @@
                     '<thead><tr><th>Event</th><th>Rating</th><th>Comment</th><th>Date</th></tr></thead><tbody>' +
                     filtered.map(function(row) {
                         return '<tr>' +
-                            '<td>' + (row.event_name || '—') + '</td>' +
-                            '<td class="rating-cell"><span class="rating-stars" title="' + row.rating + '">' + starString(row.rating) + '</span></td>' +
-                            '<td class="comment-cell" title="' + (row.comment || '').replace(/"/g, '&quot;') + '">' + (row.comment || '—') + '</td>' +
-                            '<td class="date-cell">' + formatDate(row.created_at) + '</td>' +
+                            '<td>' + escapeHtml(row.event_name || '—') + '</td>' +
+                            '<td class="rating-cell"><span class="rating-stars" title="' + escapeHtml(row.rating) + '">' + starString(row.rating) + '</span></td>' +
+                            '<td class="comment-cell" title="' + escapeHtml(row.comment || '') + '">' + escapeHtml(row.comment || '—') + '</td>' +
+                            '<td class="date-cell">' + escapeHtml(formatDate(row.created_at)) + '</td>' +
                             '</tr>';
                     }).join('') +
                     '</tbody></table></div></div>';

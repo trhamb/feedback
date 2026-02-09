@@ -98,6 +98,12 @@
 
             function roleClass(r) { return r === 'admin' ? 'role-admin' : r === 'staff' ? 'role-staff' : 'role-volunteer'; }
 
+            function escapeHtml(str) {
+                if (str == null) return '';
+                const s = String(str);
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
             function renderUsers(list) {
                 if (!list || list.length === 0) {
                     setContent('<div class="users-loading">No users found.</div>');
@@ -107,13 +113,13 @@
                     list.map(function(u) {
                         const created = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
                         return '<tr data-id="' + u.id + '">' +
-                            '<td><span class="username-text">' + (u.username || '—') + '</span></td>' +
-                            '<td><span class="role-badge ' + roleClass(u.role) + '">' + (u.role || 'staff') + '</span></td>' +
-                            '<td>' + created + '</td>' +
+                            '<td><span class="username-text">' + escapeHtml(u.username || '—') + '</span></td>' +
+                            '<td><span class="role-badge ' + roleClass(u.role) + '">' + escapeHtml(u.role || 'staff') + '</span></td>' +
+                            '<td>' + escapeHtml(created) + '</td>' +
                             '<td><button type="button" class="edit-btn" data-id="' + u.id + '">Edit</button></td>' +
                             '</tr>' +
                             '<tr class="edit-row" data-for="' + u.id + '" style="display:none;"><td colspan="4"><div class="edit-form" id="edit-form-' + u.id + '">' +
-                            '<div class="form-group"><label>Username</label><input type="text" class="edit-username" value="' + (u.username || '').replace(/"/g, '&quot;') + '"></div>' +
+                            '<div class="form-group"><label>Username</label><input type="text" class="edit-username" value="' + escapeHtml(u.username || '') + '"></div>' +
                             '<div class="form-group"><label>Role</label><select class="edit-role">' +
                             '<option value="volunteer"' + (u.role === 'volunteer' ? ' selected' : '') + '>Volunteer</option>' +
                             '<option value="staff"' + (u.role === 'staff' ? ' selected' : '') + '>Staff</option>' +

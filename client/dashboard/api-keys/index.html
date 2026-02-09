@@ -44,11 +44,11 @@
         </header>
 
         <div id="content">
-        <p style="color:#555;font-size:0.9rem;margin-bottom:1rem;">Create keys for access to feedback data (e.g. Power Automate, SharePoint). Keys can only read feedback entries.</p>
+        <p style="color:#555;font-size:0.9rem;margin-bottom:1rem;">Create keys for access to feedback data. Keys can only read feedback entries.</p>
 
         <div class="create-section">
             <div class="form-group">
-                <label for="key-name">Key name (e.g. "SharePoint / Power Automate")</label>
+                <label for="key-name">Key name:</label>
                 <input type="text" id="key-name" placeholder="e.g. API Key Name">
             </div>
             <button type="button" class="create-btn" id="create-btn">Generate API key</button>
@@ -96,6 +96,12 @@
             const keyValueEl = document.getElementById('key-value');
             const copyKeyBtn = document.getElementById('copy-key-btn');
 
+            function escapeHtml(str) {
+                if (str == null) return '';
+                const s = String(str);
+                return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            }
+
             function setList(html) {
                 keysListEl.innerHTML = html;
             }
@@ -116,7 +122,7 @@
                         '<div class="feedback-card"><table class="keys-table"><thead><tr><th>Name</th><th>Created</th><th></th></tr></thead><tbody>' +
                         list.map(function(k) {
                             const created = k.created_at ? new Date(k.created_at).toLocaleString() : '—';
-                            return '<tr><td>' + (k.name || '—') + '</td><td>' + created + '</td><td><button type="button" class="revoke-btn" data-id="' + k.id + '">Revoke</button></td></tr>';
+                            return '<tr><td>' + escapeHtml(k.name || '—') + '</td><td>' + escapeHtml(created) + '</td><td><button type="button" class="revoke-btn" data-id="' + k.id + '">Revoke</button></td></tr>';
                         }).join('') +
                         '</tbody></table></div>'
                     );
