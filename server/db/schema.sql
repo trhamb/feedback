@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS staff (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Settings (hub PIN editable from dashboard)
+-- Settings (optional key/value for app configuration)
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

@@ -19,43 +19,11 @@ app.set('trust proxy', 1);
 // You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 const LINK_SECRET = process.env.LINK_SECRET || 'change-this-secret-in-production-abc123';
 
-// PIN to access hub options (home, manual form, link generator). Read from DB if set; else FEEDBACK_HUB_PIN env.
-let hubPin = process.env.FEEDBACK_HUB_PIN || '1234';
-function getHubPin() { return hubPin; }
-const PIN_COOKIE_NAME = 'pin_verified';
-const PIN_COOKIE_MAX_AGE_HOURS = 24;
-
 // Staff dashboard session (signed cookie)
 const STAFF_COOKIE_NAME = 'staff_session';
 const STAFF_SESSION_MAX_AGE_HOURS = 24;
 const PBKDF2_ITERATIONS = 100000;
 const PBKDF2_KEYLEN = 64;
-
-function signPinCookie(timestamp) {
-    return crypto.createHmac('sha256', LINK_SECRET).update(String(timestamp)).digest('hex');
-}
-
-function verifyPinCookie(value) {
-    if (!value || typeof value !== 'string') return false;
-    const [timestamp, sig] = value.split('.');
-    if (!timestamp || !sig) return false;
-    const ageHours = (Date.now() - parseInt(timestamp, 10)) / (1000 * 60 * 60);
-    if (ageHours < 0 || ageHours > PIN_COOKIE_MAX_AGE_HOURS) return false;
-    const expected = signPinCookie(timestamp);
-    return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
-}
-
-function getPinCookie(req) {
-    const raw = req.headers.cookie;
-    if (!raw) return null;
-    const part = raw.split(';').map((s) => s.trim()).find((s) => s.startsWith(PIN_COOKIE_NAME + '='));
-    if (!part) return null;
-    try {
-        return decodeURIComponent(part.slice(PIN_COOKIE_NAME.length + 1));
-    } catch {
-        return null;
-    }
-}
 
 function isProtectedGetPath(req) {
     if (req.method !== 'GET') return false;
@@ -121,31 +89,6 @@ function cookieSecure(req) {
 
 app.use(express.json());
 
-// PIN verification endpoint (no cookie required)
-app.post('/api/verify-pin', (req, res) => {
-    const { pin } = req.body || {};
-    let redirect = (req.body && req.body.redirect) || '/';
-    // Only allow same-origin path redirects (no protocol/host)
-    if (redirect.startsWith('http:') || redirect.startsWith('https:') || redirect.startsWith('//')) {
-        redirect = '/';
-    }
-    if (!redirect.startsWith('/')) redirect = '/';
-    if (String(pin) === String(getHubPin())) {
-        const timestamp = Date.now().toString();
-        const signature = signPinCookie(timestamp);
-        const cookieValue = `${timestamp}.${signature}`;
-        res.cookie(PIN_COOKIE_NAME, cookieValue, {
-            httpOnly: true,
-            secure: cookieSecure(req),
-            sameSite: 'lax',
-            maxAge: PIN_COOKIE_MAX_AGE_HOURS * 60 * 60 * 1000,
-            path: '/',
-        });
-        return res.json({ success: true, redirect });
-    }
-    return res.status(401).json({ success: false, error: 'Incorrect PIN' });
-});
-
 // Protect hub pages: require login (any role); redirect to login if not authenticated
 app.use((req, res, next) => {
     const staff = getAuthenticatedStaff(req);
@@ -191,7 +134,7 @@ if (!hasRoleColumn) {
     db.prepare('ALTER TABLE staff ADD COLUMN role TEXT NOT NULL DEFAULT \'staff\'').run();
 }
 
-// Settings table for hub PIN (editable from dashboard)
+// Settings table (optional app settings)
 try {
     db.prepare("SELECT 1 FROM settings LIMIT 1").get();
 } catch {
@@ -199,12 +142,6 @@ try {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     )`);
-}
-const savedPin = db.prepare("SELECT value FROM settings WHERE key = 'hub_pin'").get();
-if (savedPin) {
-    hubPin = savedPin.value;
-} else {
-    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hub_pin', ?)").run(hubPin);
 }
 
 // Returns staffId only if cookie is valid AND staff still exists in DB (e.g. after re-clone)
@@ -249,7 +186,7 @@ app.use((req, res, next) => {
     if (!hasRole(staff, 'staff', 'admin')) {
         return res.redirect('/?message=Dashboard requires staff or admin role');
     }
-    const adminOnlyPaths = ['/dashboard/add-staff', '/dashboard/change-pin', '/dashboard/users'];
+    const adminOnlyPaths = ['/dashboard/add-staff', '/dashboard/users'];
     const isAdminOnly = adminOnlyPaths.some((p) => req.path === p || req.path.startsWith(p + '/'));
     if (isAdminOnly && !hasRole(staff, 'admin')) {
         return res.redirect('/dashboard/');
@@ -371,28 +308,6 @@ app.put('/api/staff/:id', (req, res) => {
     }
 });
 
-// Change hub PIN (admin only, requires current PIN)
-app.post('/api/settings/pin', (req, res) => {
-    const staff = getAuthenticatedStaff(req);
-    if (!staff) {
-        clearStaffCookie(res);
-        return res.status(401).json({ error: 'Authentication required' });
-    }
-    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
-    const { currentPin, newPin } = req.body || {};
-    if (!currentPin || !newPin || typeof currentPin !== 'string' || typeof newPin !== 'string') {
-        return res.status(400).json({ error: 'Current PIN and new PIN are required' });
-    }
-    const newTrimmed = newPin.trim();
-    if (newTrimmed.length < 4) return res.status(400).json({ error: 'New PIN must be at least 4 characters' });
-    if (String(currentPin) !== String(getHubPin())) {
-        return res.status(401).json({ error: 'Current PIN is incorrect' });
-    }
-    hubPin = newTrimmed;
-    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hub_pin', ?)").run(newTrimmed);
-    return res.json({ success: true });
-});
-
 // Hash client IP for duplicate check (we don't store raw IPs)
 function hashIp(ip) {
     return crypto.createHash('sha256').update(ip + LINK_SECRET).digest('hex').substring(0, 32);
@@ -491,10 +406,6 @@ app.post("/api/feedback", (req, res) => {
         res.status(500).json({ error: "Failed to save feedback" });
     }
 });
-
-// Redirect old PIN page to login (hub is now login-protected)
-app.get('/pin', (req, res) => res.redirect(302, '/dashboard/login/?redirect=' + encodeURIComponent(req.query.redirect || '/')));
-app.get('/pin/', (req, res) => res.redirect(302, '/dashboard/login/?redirect=' + encodeURIComponent(req.query.redirect || '/')));
 
 // Static files last – serve client after API routes
 app.use(express.static(path.join(__dirname, "../client")));
