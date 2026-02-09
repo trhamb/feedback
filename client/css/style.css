@@ -13,17 +13,34 @@
 /* ===================
    Mobile First (Default)
    =================== */
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
 .container {
     height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    overflow: hidden;
+}
+
+.container-scroll {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     padding: 15% 0;
+    overflow: auto;
 }
 
 .container .user-bar {
-    margin-top: auto;
+    flex-shrink: 0;
     padding-bottom: 1rem;
 }
 
@@ -105,9 +122,8 @@ header h1 {
    Tablet (min-width: 600px)
    =================== */
 @media (min-width: 600px) {
-    .container {
+    .container-scroll {
         padding: 3rem 2rem;
-        gap: 2.5rem;
     }
 
     #logo {
@@ -134,9 +150,8 @@ header h1 {
    Desktop (min-width: 900px)
    =================== */
 @media (min-width: 900px) {
-    .container {
+    .container-scroll {
         padding: 4rem 2rem;
-        gap: 3rem;
     }
 
     #logo {

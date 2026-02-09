@@ -3,14 +3,42 @@
 
 * { box-sizing: border-box; font-family: "Quicksand", sans-serif; }
 
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
-    padding: 2rem;
+    margin: 0;
 }
 
 .dashboard-page {
-    min-height: 100vh;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
     background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
     padding: 1rem;
+    overflow: hidden;
+}
+
+.dashboard-header {
+    flex-shrink: 0;
+}
+
+.dashboard-toolbar {
+    flex-shrink: 0;
+}
+
+.dashboard-page #content {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+.dashboard-page > .form-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
 }
 
 .dashboard-header {
@@ -19,7 +47,7 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
     padding: 0.5rem 0;
 }
 
