@@ -23,3 +23,11 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- API keys for programmatic access (e.g. Power Automate). Store only key hash; raw key shown once on create.
+CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

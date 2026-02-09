@@ -144,6 +144,40 @@ try {
     )`);
 }
 
+// API keys table (for Power Automate / integrations – feedback read-only)
+try {
+    db.prepare("SELECT 1 FROM api_keys LIMIT 1").get();
+} catch {
+    db.exec(`CREATE TABLE IF NOT EXISTS api_keys (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        key_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+}
+
+// --- API key helpers (for GET /api/feedback) ---
+const API_KEY_PREFIX = 'fb_';
+function hashApiKey(key) {
+    return crypto.createHash('sha256').update(key).digest('hex');
+}
+function getApiKeyFromRequest(req) {
+    const auth = req.headers.authorization;
+    if (auth && typeof auth === 'string' && auth.startsWith('Bearer ')) {
+        return auth.slice(7).trim();
+    }
+    const xKey = req.headers['x-api-key'];
+    if (xKey && typeof xKey === 'string') return xKey.trim();
+    return null;
+}
+function isValidApiKey(req) {
+    const raw = getApiKeyFromRequest(req);
+    if (!raw || !raw.startsWith(API_KEY_PREFIX)) return false;
+    const hash = hashApiKey(raw);
+    const row = db.prepare('SELECT id FROM api_keys WHERE key_hash = ?').get(hash);
+    return !!row;
+}
+
 // Returns staffId only if cookie is valid AND staff still exists in DB (e.g. after re-clone)
 function getAuthenticatedStaffId(req) {
     const staffId = verifyStaffCookie(getStaffCookie(req));
@@ -186,7 +220,7 @@ app.use((req, res, next) => {
     if (!hasRole(staff, 'staff', 'admin')) {
         return res.redirect('/?message=Dashboard requires staff or admin role');
     }
-    const adminOnlyPaths = ['/dashboard/add-staff', '/dashboard/users'];
+    const adminOnlyPaths = ['/dashboard/add-staff', '/dashboard/users', '/dashboard/api-keys'];
     const isAdminOnly = adminOnlyPaths.some((p) => req.path === p || req.path.startsWith(p + '/'));
     if (isAdminOnly && !hasRole(staff, 'admin')) {
         return res.redirect('/dashboard/');
@@ -308,6 +342,53 @@ app.put('/api/staff/:id', (req, res) => {
     }
 });
 
+// --- API keys (admin only): for Power Automate / SharePoint integration ---
+// Create API key (returns raw key once – store it securely; it cannot be retrieved again)
+app.post('/api/keys', (req, res) => {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Authentication required' });
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
+    const name = (req.body && req.body.name && String(req.body.name).trim()) || 'API key';
+    const rawKey = API_KEY_PREFIX + crypto.randomBytes(32).toString('hex');
+    const keyHash = hashApiKey(rawKey);
+    const result = db.prepare('INSERT INTO api_keys (name, key_hash) VALUES (?, ?)').run(name, keyHash);
+    return res.status(201).json({
+        id: result.lastInsertRowid,
+        name,
+        key: rawKey,
+        created_at: new Date().toISOString(),
+        message: 'Copy this key now. It will not be shown again.',
+    });
+});
+
+// List API keys (id, name, created_at only – no key values)
+function handleGetApiKeys(req, res) {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Authentication required' });
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
+    try {
+        const rows = db.prepare('SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC').all();
+        return res.json(rows);
+    } catch (err) {
+        console.error('GET /api/keys:', err);
+        return res.status(500).json({ error: 'Failed to load API keys' });
+    }
+}
+app.get('/api/keys', handleGetApiKeys);
+app.get('/api/keys/', handleGetApiKeys);
+
+// Revoke API key
+app.delete('/api/keys/:id', (req, res) => {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Authentication required' });
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id < 1) return res.status(400).json({ error: 'Invalid id' });
+    const result = db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
+    if (result.changes === 0) return res.status(404).json({ error: 'API key not found' });
+    return res.json({ success: true });
+});
+
 // Hash client IP for duplicate check (we don't store raw IPs)
 function hashIp(ip) {
     return crypto.createHash('sha256').update(ip + LINK_SECRET).digest('hex').substring(0, 32);
@@ -351,8 +432,13 @@ app.post("/api/generate-link", (req, res) => {
     res.json({ success: true, link, event_name: name });
 });
 
-// Dashboard: list feedback (staff or admin)
+// Dashboard: list feedback (staff/admin via session, or valid API key for Power Automate etc.)
 app.get("/api/feedback", (req, res) => {
+    const viaApiKey = isValidApiKey(req);
+    if (viaApiKey) {
+        const rows = db.prepare("SELECT id, event_name, rating, comment, created_at FROM feedback ORDER BY created_at DESC").all();
+        return res.json(rows);
+    }
     const staff = getAuthenticatedStaff(req);
     if (!staff) {
         clearStaffCookie(res);

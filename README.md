@@ -5,7 +5,7 @@ A simple app to easily collect feedback after SSW events.
 ***Features:***
 - Manual Feedback: A simple screen where a user can submit a feedback score and optional comment consecutively.
 - Generate Feedback Link - Input an event name to create a custom url to send out to a mailing list. Recipients of the link can then submit feedback remotely.
-- Staff dashboard: Login protected dashboard for staff to view and retrieve submitted feedback. Admins can manage users (add, edit roles).
+- Staff dashboard: Login protected dashboard for staff to view and retrieve submitted feedback. Admins can manage users (add, edit roles) and create API keys for programmatic access (e.g. Power Automate, SharePoint).
 
 
 ## Management

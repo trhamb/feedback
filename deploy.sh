@@ -10,13 +10,6 @@ cd "$APP_DIR"
 
 echo "==> Pulling latest code..."
 
-# Stop if working tree isn't clean
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "ERROR: You have uncommitted changes in $APP_DIR. Commit/stash them first."
-  git status --porcelain
-  exit 1
-fi
-
 git pull
 
 cd "$SERVER_DIR"

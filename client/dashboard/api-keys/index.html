@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>API Keys - SSW Feedback</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../../css/dashboard.css">
+    <link rel="stylesheet" href="../../css/feedback-form.css">
+    <style>
+        .api-keys-page { min-height: 100vh; padding: 1rem; }
+        .api-keys-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .api-keys-header h1 { font-size: 1.25rem; color: #333; margin: 0; }
+        .back-link { color: #00B2F5; text-decoration: none; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+        .keys-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+        .keys-table th, .keys-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; }
+        .keys-table th { background: #f8f9fa; font-weight: 600; color: #333; }
+        .keys-table tr:last-child td { border-bottom: none; }
+        .revoke-btn { padding: 0.4rem 0.75rem; background: #dc3545; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .revoke-btn:hover { background: #c82333; }
+        .create-section { margin-bottom: 1.5rem; }
+        .create-section .form-group { margin-bottom: 0.75rem; }
+        .create-section label { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; color: #555; }
+        .create-section input { padding: 0.5rem; border: 2px solid #ddd; border-radius: 6px; font-size: 0.9rem; width: 100%; max-width: 280px; }
+        .create-btn { padding: 0.5rem 1rem; background: #00B2F5; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+        .create-btn:hover { background: #0099d4; }
+        .key-reveal { background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 1rem; border: 2px solid #28a745; max-width: 600px; }
+        .key-reveal p { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #155724; }
+        .key-reveal code { display: block; word-break: break-all; font-size: 0.85rem; padding: 0.5rem; background: white; border-radius: 4px; margin-bottom: 0.5rem; }
+        .copy-btn { padding: 0.4rem 0.75rem; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .copy-btn:hover { background: #218838; }
+        .copy-btn.copied { background: #6c757d; }
+        .help-box { background: #e7f3ff; padding: 1rem; border-radius: 8px; margin-top: 1.5rem; font-size: 0.9rem; color: #333; max-width: 600px; }
+        .help-box code { background: rgba(0,0,0,0.06); padding: 0.1rem 0.3rem; border-radius: 4px; }
+        .keys-loading, .keys-error { padding: 1.5rem; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="api-keys-page dashboard-page">
+        <header class="api-keys-header dashboard-header">
+            <h1>API Keys</h1>
+            <a href="../" class="back-link">← Back to Dashboard</a>
+        </header>
+
+        <p style="color:#555;font-size:0.9rem;margin-bottom:1rem;">Create keys for programmatic access to feedback data (e.g. Power Automate, SharePoint). Keys can only read feedback entries.</p>
+
+        <div class="create-section">
+            <div class="form-group">
+                <label for="key-name">Key name (e.g. "SharePoint / Power Automate")</label>
+                <input type="text" id="key-name" placeholder="e.g. API Key Name">
+            </div>
+            <button type="button" class="create-btn" id="create-btn">Generate API key</button>
+            <div id="key-reveal" class="key-reveal" style="display:none;">
+                <p><strong>Copy this key now – it won't be shown again.</strong></p>
+                <code id="key-value"></code>
+                <button type="button" class="copy-btn" id="copy-key-btn">Copy key</button>
+            </div>
+        </div>
+
+        <div id="keys-list"></div>
+
+        <div class="help-box">
+            <strong>Using the key</strong><br>
+            Request <code>GET /api/feedback</code> with either header:<br>
+            <code>Authorization: Bearer YOUR_KEY</code> or <code>X-API-Key: YOUR_KEY</code><br>
+            Response is JSON: array of feedback entries (id, event_name, rating, comment, created_at).
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const path = window.location.pathname.replace(/\/$/, '') || '/';
+            const base = path.indexOf('/dashboard') !== -1 ? path.substring(0, path.indexOf('/dashboard')) : '';
+
+            function redirectToLogin() {
+                window.location.href = base + '/dashboard/login/?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+            }
+
+            // Same URL pattern as Manage users page: base + '/api/...'
+            async function fetchJson(path, options) {
+                const url = (base || '') + (path.startsWith('/') ? path : '/' + path);
+                const res = await fetch(url, { credentials: 'include', ...options });
+                const data = await res.json().catch(function() { return {}; });
+                if (res.status === 401) { redirectToLogin(); throw new Error('Unauthorized'); }
+                if (!res.ok) throw new Error(data.error || 'Request failed (' + res.status + ')');
+                return data;
+            }
+
+            const keysListEl = document.getElementById('keys-list');
+            const keyNameInput = document.getElementById('key-name');
+            const createBtn = document.getElementById('create-btn');
+            const keyReveal = document.getElementById('key-reveal');
+            const keyValueEl = document.getElementById('key-value');
+            const copyKeyBtn = document.getElementById('copy-key-btn');
+
+            function setList(html) {
+                keysListEl.innerHTML = html;
+            }
+
+            async function loadKeys() {
+                setList('<div class="keys-loading">Loading keys…</div>');
+                try {
+                    const list = await fetchJson('/api/keys');
+                    if (!Array.isArray(list)) {
+                        setList('<div class="keys-error">Unexpected response from server.</div>');
+                        return;
+                    }
+                    if (list.length === 0) {
+                        setList('<p class="keys-loading">No API keys yet. Generate one above.</p>');
+                        return;
+                    }
+                    setList(
+                        '<div class="feedback-card"><table class="keys-table"><thead><tr><th>Name</th><th>Created</th><th></th></tr></thead><tbody>' +
+                        list.map(function(k) {
+                            const created = k.created_at ? new Date(k.created_at).toLocaleString() : '—';
+                            return '<tr><td>' + (k.name || '—') + '</td><td>' + created + '</td><td><button type="button" class="revoke-btn" data-id="' + k.id + '">Revoke</button></td></tr>';
+                        }).join('') +
+                        '</tbody></table></div>'
+                    );
+                    keysListEl.querySelectorAll('.revoke-btn').forEach(function(btn) {
+                        btn.addEventListener('click', function() {
+                            if (!confirm('Revoke this API key? It will stop working immediately.')) return;
+                            revokeKey(btn.getAttribute('data-id'));
+                        });
+                    });
+                } catch (e) {
+                    setList('<div class="keys-error">' + (e.message || 'Failed to load keys') + '.</div>');
+                }
+            }
+
+            async function revokeKey(id) {
+                try {
+                    await fetchJson('/api/keys/' + id, { method: 'DELETE' });
+                    loadKeys();
+                } catch (e) {
+                    alert(e.message || 'Failed to revoke key');
+                }
+            }
+
+            createBtn.addEventListener('click', async function() {
+                const name = (keyNameInput.value || '').trim() || 'API key';
+                createBtn.disabled = true;
+                createBtn.textContent = 'Creating…';
+                keyReveal.style.display = 'none';
+                try {
+                    const res = await fetch((base || '') + '/api/keys', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ name: name })
+                    });
+                    const data = await res.json().catch(function() { return {}; });
+                    if (res.status === 401) { redirectToLogin(); return; }
+                    if (!res.ok) throw new Error(data.error || 'Failed to create key');
+                    keyValueEl.textContent = data.key || '';
+                    keyReveal.style.display = 'block';
+                    copyKeyBtn.textContent = 'Copy key';
+                    copyKeyBtn.classList.remove('copied');
+                    loadKeys();
+                } catch (e) {
+                    alert(e.message || 'Failed to create API key');
+                } finally {
+                    createBtn.disabled = false;
+                    createBtn.textContent = 'Generate API key';
+                }
+            });
+
+            copyKeyBtn.addEventListener('click', function() {
+                const key = keyValueEl.textContent;
+                if (!key) return;
+                navigator.clipboard.writeText(key).then(function() {
+                    copyKeyBtn.textContent = 'Copied!';
+                    copyKeyBtn.classList.add('copied');
+                    setTimeout(function() { copyKeyBtn.textContent = 'Copy key'; copyKeyBtn.classList.remove('copied'); }, 2000);
+                });
+            });
+
+            loadKeys();
+        });
+    </script>
+</body>
+</html>
