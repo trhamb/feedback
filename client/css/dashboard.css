@@ -29,6 +29,13 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    position: relative;
+}
+
+.dashboard-header .user-bar-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 .dashboard-header .user-bar span {
@@ -38,6 +45,73 @@
 
 .dashboard-header #user-name {
     display: none;
+}
+
+/* Menu button: hidden on desktop, shown on mobile/tablet */
+.dashboard-menu-btn {
+    display: none;
+    padding: 0.5rem 1rem;
+    background: #00B2F5;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.35rem;
+}
+.dashboard-menu-btn:hover { background: #0099d4; }
+.dashboard-menu-btn[aria-expanded="true"] { background: #0099d4; }
+
+/* Mobile/tablet: show menu button, collapse user-bar into full-width dropdown */
+@media (max-width: 767px) {
+    .dashboard-menu-btn {
+        display: inline-flex;
+    }
+    .dashboard-header .user-bar-inner {
+        display: none;
+        position: fixed;
+        left: 0.5rem;
+        right: 0.5rem;
+        width: auto;
+        top: 0; /* set by JS to header bottom */
+        flex-direction: column;
+        align-items: stretch;
+        background: white;
+        border-radius: 0;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 0;
+        z-index: 100;
+        overflow: hidden;
+    }
+    .dashboard-header .user-bar.open .user-bar-inner {
+        display: flex;
+    }
+    .dashboard-header .user-bar-inner .btn-add-staff {
+        display: block;
+        padding: 0.75rem 1rem;
+        border-radius: 0;
+        text-align: left;
+    }
+    .dashboard-header .user-bar-inner .btn-add-staff:hover {
+        background: #e8f4fc;
+        color: #0099d4;
+    }
+    .dashboard-header .user-bar-inner #user-name {
+        display: block;
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+        color: #666;
+        border-bottom: 1px solid #eee;
+        border-radius: 0;
+    }
+    .dashboard-header .user-bar-inner .logout-btn {
+        margin-top: 0;
+        border-radius: 0;
+        text-align: center;
+        padding: 0.75rem 1rem;
+    }
 }
 
 .dashboard-header .logout-btn {

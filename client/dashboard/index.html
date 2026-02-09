@@ -12,14 +12,17 @@
         <header class="dashboard-header">
             <h1>Feedback Dashboard</h1>
             <div class="user-bar">
-                <span id="admin-links" style="display:none;">
-                    <a href="/" class="btn-download-csv btn-add-staff">Back to Hub</a>
-                    <a href="add-staff/" class="btn-download-csv btn-add-staff">Add user</a>
-                    <a href="users/" class="btn-download-csv btn-add-staff">Manage users</a>
-                    <a href="api-keys/" class="btn-download-csv btn-add-staff">API keys</a>
-                </span>
-                <span id="user-name">—</span>
-                <button type="button" class="logout-btn" id="logout-btn">Sign out</button>
+                <button type="button" class="dashboard-menu-btn" id="dashboard-menu-btn" aria-expanded="false" aria-controls="dashboard-menu" aria-label="Open menu">Menu</button>
+                <div class="user-bar-inner" id="dashboard-menu">
+                    <span id="admin-links" style="display:none;">
+                        <a href="/" class="btn-download-csv btn-add-staff">Back to Hub</a>
+                        <a href="add-staff/" class="btn-download-csv btn-add-staff">Add user</a>
+                        <a href="users/" class="btn-download-csv btn-add-staff">Manage users</a>
+                        <a href="api-keys/" class="btn-download-csv btn-add-staff">API keys</a>
+                    </span>
+                    <span id="user-name">—</span>
+                    <button type="button" class="logout-btn" id="logout-btn">Sign out</button>
+                </div>
             </div>
         </header>
 
@@ -62,6 +65,31 @@
                     throw new Error('Unauthorized');
                 }
                 return res.json();
+            }
+
+            var userBar = document.querySelector('.user-bar');
+            var menuBtn = document.getElementById('dashboard-menu-btn');
+            var menuPanel = document.getElementById('dashboard-menu');
+            if (menuBtn && userBar && menuPanel) {
+                menuBtn.addEventListener('click', function() {
+                    var open = userBar.classList.toggle('open');
+                    menuBtn.setAttribute('aria-expanded', open);
+                    menuBtn.textContent = open ? 'Close' : 'Menu';
+                    if (open) {
+                        var header = document.querySelector('.dashboard-header');
+                        if (header) menuPanel.style.top = header.getBoundingClientRect().bottom + 'px';
+                    } else {
+                        menuPanel.style.top = '';
+                    }
+                });
+                document.addEventListener('click', function(e) {
+                    if (!userBar.contains(e.target)) {
+                        userBar.classList.remove('open');
+                        menuBtn.setAttribute('aria-expanded', 'false');
+                        menuBtn.textContent = 'Menu';
+                        menuPanel.style.top = '';
+                    }
+                });
             }
 
             async function loadMe() {

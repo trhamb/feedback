@@ -19,7 +19,12 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 15% 0 ;
+    padding: 15% 0;
+}
+
+.container .user-bar {
+    margin-top: auto;
+    padding-bottom: 1rem;
 }
 
 #logo {
@@ -40,7 +45,6 @@ header h1 {
 }
 
 .user-bar {
-    margin-top: 0.75rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
