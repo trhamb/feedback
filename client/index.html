@@ -17,19 +17,56 @@
 
         <div class="container">
             <header>
-                <img id="logo"src="img/sswlogo.png" alt="SSW Logo">
+                <img id="logo" src="img/sswlogo.png" alt="SSW Logo">
                 <h1>Feedback Hub</h1>
+                <div id="user-bar" class="user-bar" style="display:none;">
+                    <span id="user-name"></span>
+                    <button type="button" id="logout-btn" class="logout-btn">Sign out</button>
+                </div>
             </header>
             
-            <div class="buttons">
-                <a href="/manual/"><button>Manual Feedback</button></a>
-                <a href="/generate/"><button>Generate Feedback Link</button></a>
-                <a href="/dashboard/"><button>Staff Dashboard</button></a>
+            <div id="buttons" class="buttons">
+                <div id="loading">Loading…</div>
             </div>
-            
-
         </div>
         
-        <script src="" async defer></script>
+        <script>
+            (function() {
+                const buttonsEl = document.getElementById('buttons');
+                const loadingEl = document.getElementById('loading');
+                const userBar = document.getElementById('user-bar');
+                const userName = document.getElementById('user-name');
+                const logoutBtn = document.getElementById('logout-btn');
+
+                async function load() {
+                    try {
+                        const res = await fetch('/api/staff/me', { credentials: 'include' });
+                        if (res.status === 401) {
+                            window.location.href = '/dashboard/login/?redirect=' + encodeURIComponent(window.location.pathname || '/');
+                            return;
+                        }
+                        const me = await res.json();
+                        const role = me.role || 'volunteer';
+                        userBar.style.display = 'block';
+                        userName.textContent = me.username || '';
+
+                        var html = '<a href="/manual/"><button>Manual Feedback</button></a>';
+                        if (role === 'staff' || role === 'admin') {
+                            html += '<a href="/generate/"><button>Generate Feedback Link</button></a>';
+                            html += '<a href="/dashboard/"><button>Staff Dashboard</button></a>';
+                        }
+                        buttonsEl.innerHTML = html;
+
+                        logoutBtn.addEventListener('click', async function() {
+                            try { await fetch('/api/staff/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
+                            window.location.href = '/dashboard/login/?redirect=/';
+                        });
+                    } catch (e) {
+                        buttonsEl.innerHTML = '<p class="error">Failed to load. <a href="/dashboard/login/?redirect=/">Sign in</a></p>';
+                    }
+                }
+                load();
+            })();
+        </script>
     </body>
 </html>

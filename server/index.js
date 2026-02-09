@@ -146,15 +146,16 @@ app.post('/api/verify-pin', (req, res) => {
     return res.status(401).json({ success: false, error: 'Incorrect PIN' });
 });
 
-// Protect hub pages and generate API: require valid PIN cookie
+// Protect hub pages: require login (any role); redirect to login if not authenticated
 app.use((req, res, next) => {
-    const hasValidPin = verifyPinCookie(getPinCookie(req));
-    if (isProtectedGetPath(req) && !hasValidPin) {
-        const redirectUrl = '/pin/?redirect=' + encodeURIComponent(req.originalUrl || '/');
+    const staff = getAuthenticatedStaff(req);
+    if (isProtectedGetPath(req) && !staff) {
+        const redirectUrl = '/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/');
         return res.redirect(redirectUrl);
     }
-    if (req.method === 'POST' && req.path === '/api/generate-link' && !hasValidPin) {
-        return res.status(403).json({ error: 'PIN required' });
+    if (req.method === 'POST' && req.path === '/api/generate-link') {
+        if (!staff) return res.status(401).json({ error: 'Authentication required' });
+        if (!hasRole(staff, 'staff', 'admin')) return res.status(403).json({ error: 'Staff or admin role required' });
     }
     next();
 });
@@ -179,8 +180,15 @@ try {
         id INTEGER PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('volunteer', 'staff', 'admin')),
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+}
+// Add role column to existing databases
+const staffTableInfo = db.prepare("PRAGMA table_info(staff)").all();
+const hasRoleColumn = staffTableInfo.some((c) => c.name === 'role');
+if (!hasRoleColumn) {
+    db.prepare('ALTER TABLE staff ADD COLUMN role TEXT NOT NULL DEFAULT \'staff\'').run();
 }
 
 // Settings table for hub PIN (editable from dashboard)
@@ -207,11 +215,24 @@ function getAuthenticatedStaffId(req) {
     return user ? staffId : null;
 }
 
+// Returns { id, username, role } or null (role is 'volunteer' | 'staff' | 'admin')
+function getAuthenticatedStaff(req) {
+    const staffId = verifyStaffCookie(getStaffCookie(req));
+    if (!staffId) return null;
+    const user = db.prepare('SELECT id, username, role FROM staff WHERE id = ?').get(staffId);
+    if (!user) return null;
+    return { id: user.id, username: user.username, role: user.role || 'staff' };
+}
+
+function hasRole(user, ...roles) {
+    return user && roles.includes(user.role);
+}
+
 function clearStaffCookie(res) {
     res.clearCookie(STAFF_COOKIE_NAME, { path: '/', httpOnly: true });
 }
 
-// Dashboard page protection: require valid staff session (cookie + user exists in DB)
+// Dashboard page protection: require staff or admin (volunteers cannot access dashboard)
 app.use((req, res, next) => {
     if (req.method !== 'GET') return next();
     const norm = (req.path.replace(/\/$/, '') || '/').toLowerCase();
@@ -219,10 +240,19 @@ app.use((req, res, next) => {
     if (!isDashboard) return next();
     if (req.path.startsWith('/dashboard/login')) return next();
     if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
-    const staffId = getAuthenticatedStaffId(req);
-    if (!staffId) {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) {
         clearStaffCookie(res);
         return res.redirect('/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/dashboard/'));
+    }
+    // Only staff and admin can access dashboard; admin-only routes
+    if (!hasRole(staff, 'staff', 'admin')) {
+        return res.redirect('/?message=Dashboard requires staff or admin role');
+    }
+    const adminOnlyPaths = ['/dashboard/add-staff', '/dashboard/change-pin', '/dashboard/users'];
+    const isAdminOnly = adminOnlyPaths.some((p) => req.path === p || req.path.startsWith(p + '/'));
+    if (isAdminOnly && !hasRole(staff, 'admin')) {
+        return res.redirect('/dashboard/');
     }
     next();
 });
@@ -258,13 +288,14 @@ app.post('/api/staff/logout', (req, res) => {
     return res.json({ success: true });
 });
 
-// Create new staff (requires authenticated staff)
+// Create new staff (admin only)
 app.post('/api/staff', (req, res) => {
-    const staffId = getAuthenticatedStaffId(req);
-    if (!staffId) {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) {
         clearStaffCookie(res);
         return res.status(401).json({ error: 'Authentication required' });
     }
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
     const { username, password } = req.body || {};
     if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
         return res.status(400).json({ error: 'Username and password are required' });
@@ -272,10 +303,11 @@ app.post('/api/staff', (req, res) => {
     const trimmed = username.trim();
     if (!trimmed) return res.status(400).json({ error: 'Username is required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const role = (req.body.role === 'volunteer' || req.body.role === 'admin') ? req.body.role : 'staff';
     try {
         const passwordHash = hashPassword(password);
-        db.prepare('INSERT INTO staff (username, password_hash) VALUES (?, ?)').run(trimmed, passwordHash);
-        return res.json({ success: true, username: trimmed });
+        db.prepare('INSERT INTO staff (username, password_hash, role) VALUES (?, ?, ?)').run(trimmed, passwordHash, role);
+        return res.json({ success: true, username: trimmed, role });
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
             return res.status(409).json({ error: 'A staff member with that username already exists' });
@@ -284,13 +316,69 @@ app.post('/api/staff', (req, res) => {
     }
 });
 
-// Change hub PIN (staff only, requires current PIN)
+// Current staff (for dashboard UI) – must be before /api/staff so /api/staff/me matches first
+app.get('/api/staff/me', (req, res) => {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Not authenticated' });
+    return res.json({ id: staff.id, username: staff.username, role: staff.role });
+});
+
+// List all staff (admin only)
+app.get('/api/staff', (req, res) => {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Authentication required' });
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
+    const rows = db.prepare('SELECT id, username, role, created_at FROM staff ORDER BY username').all();
+    return res.json(rows);
+});
+
+// Update staff (admin only): role and/or password
+app.put('/api/staff/:id', (req, res) => {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) return res.status(401).json({ error: 'Authentication required' });
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id < 1) return res.status(400).json({ error: 'Invalid staff id' });
+    const target = db.prepare('SELECT id, username, role FROM staff WHERE id = ?').get(id);
+    if (!target) return res.status(404).json({ error: 'Staff member not found' });
+    const { username, role: newRole, password } = req.body || {};
+    const updates = [];
+    const values = [];
+    if (typeof username === 'string' && username.trim()) {
+        const trimmed = username.trim();
+        if (trimmed !== target.username) {
+            updates.push('username = ?');
+            values.push(trimmed);
+        }
+    }
+    if (newRole === 'volunteer' || newRole === 'staff' || newRole === 'admin') {
+        updates.push('role = ?');
+        values.push(newRole);
+    }
+    if (typeof password === 'string' && password.length > 0) {
+        if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        updates.push('password_hash = ?');
+        values.push(hashPassword(password));
+    }
+    if (updates.length === 0) return res.json({ success: true, id: target.id });
+    values.push(id);
+    try {
+        db.prepare('UPDATE staff SET ' + updates.join(', ') + ' WHERE id = ?').run(...values);
+        return res.json({ success: true, id: target.id });
+    } catch (err) {
+        if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error: 'Username already in use' });
+        return res.status(500).json({ error: 'Failed to update staff' });
+    }
+});
+
+// Change hub PIN (admin only, requires current PIN)
 app.post('/api/settings/pin', (req, res) => {
-    const staffId = getAuthenticatedStaffId(req);
-    if (!staffId) {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) {
         clearStaffCookie(res);
         return res.status(401).json({ error: 'Authentication required' });
     }
+    if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
     const { currentPin, newPin } = req.body || {};
     if (!currentPin || !newPin || typeof currentPin !== 'string' || typeof newPin !== 'string') {
         return res.status(400).json({ error: 'Current PIN and new PIN are required' });
@@ -303,15 +391,6 @@ app.post('/api/settings/pin', (req, res) => {
     hubPin = newTrimmed;
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('hub_pin', ?)").run(newTrimmed);
     return res.json({ success: true });
-});
-
-// Current staff (for dashboard UI)
-app.get('/api/staff/me', (req, res) => {
-    const staffId = verifyStaffCookie(getStaffCookie(req));
-    if (!staffId) return res.status(401).json({ error: 'Not authenticated' });
-    const user = db.prepare('SELECT id, username, created_at FROM staff WHERE id = ?').get(staffId);
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-    return res.json({ id: user.id, username: user.username });
 });
 
 // Hash client IP for duplicate check (we don't store raw IPs)
@@ -357,13 +436,14 @@ app.post("/api/generate-link", (req, res) => {
     res.json({ success: true, link, event_name: name });
 });
 
-// Dashboard: list feedback (staff only)
+// Dashboard: list feedback (staff or admin)
 app.get("/api/feedback", (req, res) => {
-    const staffId = getAuthenticatedStaffId(req);
-    if (!staffId) {
+    const staff = getAuthenticatedStaff(req);
+    if (!staff) {
         clearStaffCookie(res);
         return res.status(401).json({ error: 'Authentication required' });
     }
+    if (!hasRole(staff, 'staff', 'admin')) return res.status(403).json({ error: 'Staff or admin role required' });
     const rows = db.prepare("SELECT id, event_name, rating, comment, created_at FROM feedback ORDER BY created_at DESC").all();
     res.json(rows);
 });
@@ -411,6 +491,10 @@ app.post("/api/feedback", (req, res) => {
         res.status(500).json({ error: "Failed to save feedback" });
     }
 });
+
+// Redirect old PIN page to login (hub is now login-protected)
+app.get('/pin', (req, res) => res.redirect(302, '/dashboard/login/?redirect=' + encodeURIComponent(req.query.redirect || '/')));
+app.get('/pin/', (req, res) => res.redirect(302, '/dashboard/login/?redirect=' + encodeURIComponent(req.query.redirect || '/')));
 
 // Static files last – serve client after API routes
 app.use(express.static(path.join(__dirname, "../client")));

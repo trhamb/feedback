@@ -13,7 +13,8 @@
         .add-staff-header h1 { font-size: 1.25rem; color: #333; margin: 0; }
         .form-wrap { max-width: 400px; margin: 0 auto; }
         .form-group input[type="text"],
-        .form-group input[type="password"] {
+        .form-group input[type="password"],
+        .form-group select {
             width: 100%; padding: 0.75rem; border: 2px solid #ddd; border-radius: 8px;
             font-size: 1rem; transition: border-color 0.2s ease;
         }
@@ -36,7 +37,7 @@
 <body>
     <div class="add-staff-page dashboard-page">
         <header class="add-staff-header dashboard-header">
-            <h1>Add Staff Member</h1>
+            <h1>Add User</h1>
             <a href="../" class="back-link">← Back to Dashboard</a>
         </header>
 
@@ -47,6 +48,14 @@
                     <input type="text" id="username" name="username" autocomplete="username" required autofocus>
                 </div>
                 <div class="form-group">
+                    <label for="role">Role</label>
+                    <select id="role" name="role">
+                        <option value="volunteer">Volunteer</option>
+                        <option value="staff" selected>Staff</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" autocomplete="new-password" required>
                 </div>
@@ -54,7 +63,7 @@
                     <label for="confirm-password">Confirm password</label>
                     <input type="password" id="confirm-password" name="confirm-password" autocomplete="new-password" required>
                 </div>
-                <button type="submit" class="submit-btn" id="submit-btn">Add Staff Member</button>
+                <button type="submit" class="submit-btn" id="submit-btn">Add User</button>
                 <p id="form-message" class="form-message" aria-live="polite"></p>
             </form>
         </div>
@@ -108,7 +117,7 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
-                        body: JSON.stringify({ username, password })
+                        body: JSON.stringify({ username, password, role: form.role.value })
                     });
                     let data;
                     try {
@@ -126,11 +135,11 @@
                     }
                     if (res.ok) {
                         messageEl.className = 'form-message success';
-                        messageEl.textContent = 'Staff member "' + username + '" created successfully.';
+                        messageEl.textContent = 'User "' + username + '" created successfully.';
                         form.reset();
                     } else {
                         messageEl.className = 'form-message error';
-                        messageEl.textContent = data.error || 'Failed to create staff member.';
+                        messageEl.textContent = data.error || 'Failed to create user.';
                     }
                 } catch (err) {
                     console.error('Add staff error:', err);
@@ -140,7 +149,7 @@
                         : 'Something went wrong. Please try again. (Check console for details.)';
                 } finally {
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Add Staff Member';
+                    submitBtn.textContent = 'Add User';
                 }
             });
         })();

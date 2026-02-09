@@ -9,11 +9,12 @@ CREATE TABLE IF NOT EXISTS feedback (
     ip_hash TEXT
 );
 
--- Staff accounts for dashboard access (create accounts via server/scripts/create-staff.js)
+-- Staff accounts: role is 'volunteer' | 'staff' | 'admin' (create via server/scripts/create-staff.js)
 CREATE TABLE IF NOT EXISTS staff (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('volunteer', 'staff', 'admin')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

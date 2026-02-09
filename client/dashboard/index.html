@@ -12,8 +12,11 @@
         <header class="dashboard-header">
             <h1>Feedback Dashboard</h1>
             <div class="user-bar">
-                <a href="change-pin/" class="btn-download-csv btn-add-staff">Change PIN</a>
-                <a href="add-staff/" class="btn-download-csv btn-add-staff">Add staff member</a>
+                <span id="admin-links" style="display:none;">
+                    <a href="change-pin/" class="btn-download-csv btn-add-staff">Change PIN</a>
+                    <a href="add-staff/" class="btn-download-csv btn-add-staff">Add staff</a>
+                    <a href="users/" class="btn-download-csv btn-add-staff">Manage users</a>
+                </span>
                 <span id="user-name">—</span>
                 <button type="button" class="logout-btn" id="logout-btn">Sign out</button>
             </div>
@@ -63,6 +66,9 @@
             async function loadMe() {
                 const data = await fetchJson('/api/staff/me');
                 userNameEl.textContent = data.username || 'Staff';
+                if (data.role === 'admin') {
+                    document.getElementById('admin-links').style.display = '';
+                }
             }
 
             async function loadFeedback() {

@@ -39,6 +39,28 @@ header h1 {
     margin-top: 0.5rem;
 }
 
+.user-bar {
+    margin-top: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+    color: #555;
+}
+.logout-btn {
+    background: transparent;
+    color: #00B2F5;
+    border: 1px solid #00B2F5;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.logout-btn:hover { background: #f0f9ff; }
+#loading { color: #666; }
+.buttons .error { color: #666; font-size: 0.95rem; }
+.buttons .error a { color: #00B2F5; }
+
 .buttons {
     display: flex;
     flex-direction: column;

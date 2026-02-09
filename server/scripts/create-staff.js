@@ -1,7 +1,8 @@
 /**
- * Create a staff account for dashboard access.
- * Usage: node scripts/create-staff.js <username> <password>
- * Or from repo root: node server/scripts/create-staff.js <username> <password>
+ * Create a user account (volunteer, staff, or admin).
+ * Usage: node scripts/create-staff.js <username> <password> [role]
+ *   role: volunteer | staff | admin (default: staff)
+ * Or from repo root: node server/scripts/create-staff.js <username> <password> [role]
  */
 import crypto from 'crypto';
 import path from 'path';
@@ -20,9 +21,12 @@ function hashPassword(password) {
 
 const username = process.argv[2];
 const password = process.argv[3];
+const roleArg = (process.argv[4] || 'staff').toLowerCase();
+const role = roleArg === 'volunteer' || roleArg === 'admin' ? roleArg : 'staff';
 
 if (!username || !password) {
-    console.error('Usage: node create-staff.js <username> <password>');
+    console.error('Usage: node create-staff.js <username> <password> [role]');
+    console.error('  role: volunteer | staff | admin (default: staff)');
     process.exit(1);
 }
 
@@ -34,17 +38,25 @@ try {
         id INTEGER PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('volunteer', 'staff', 'admin')),
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+} catch (_) {}
+// Add role column if missing (existing DBs)
+try {
+    const info = db.prepare('PRAGMA table_info(staff)').all();
+    if (!info.some((c) => c.name === 'role')) {
+        db.prepare('ALTER TABLE staff ADD COLUMN role TEXT NOT NULL DEFAULT \'staff\'').run();
+    }
 } catch (_) {}
 
 try {
     const password_hash = hashPassword(password);
-    db.prepare('INSERT INTO staff (username, password_hash) VALUES (?, ?)').run(username.trim(), password_hash);
-    console.log('Staff account created for:', username.trim());
+    db.prepare('INSERT INTO staff (username, password_hash, role) VALUES (?, ?, ?)').run(username.trim(), password_hash, role);
+    console.log('User created:', username.trim(), 'role:', role);
 } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
-        console.error('Error: A staff user with that username already exists.');
+        console.error('Error: A user with that username already exists.');
     } else {
         console.error('Error:', err.message);
     }

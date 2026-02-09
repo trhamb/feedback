@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Manage Users - SSW Feedback</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../../css/dashboard.css">
+    <link rel="stylesheet" href="../../css/feedback-form.css">
+    <style>
+        .users-page { min-height: 100vh; padding: 1rem; }
+        .users-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .users-header h1 { font-size: 1.25rem; color: #333; margin: 0; }
+        .back-link { color: #00B2F5; text-decoration: none; font-size: 0.9rem; }
+        .back-link:hover { text-decoration: underline; }
+        .users-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+        .users-table th, .users-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; }
+        .users-table th { background: #f8f9fa; font-weight: 600; color: #333; }
+        .users-table tr:last-child td { border-bottom: none; }
+        .users-table .role-badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+        .role-volunteer { background: #e3f2fd; color: #1565c0; }
+        .role-staff { background: #e8f5e9; color: #2e7d32; }
+        .role-admin { background: #fff3e0; color: #e65100; }
+        .edit-btn { padding: 0.4rem 0.75rem; background: #00B2F5; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; }
+        .edit-btn:hover { background: #0099d4; }
+        .edit-form { display: none; background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-top: 0.5rem; }
+        .edit-form.visible { display: block; }
+        .edit-form .form-group { margin-bottom: 0.75rem; }
+        .edit-form .form-group label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; color: #555; }
+        .edit-form input, .edit-form select { width: 100%; padding: 0.5rem; border: 2px solid #ddd; border-radius: 6px; font-size: 0.9rem; }
+        .edit-form .form-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; }
+        .edit-form .save-btn { padding: 0.5rem 1rem; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .edit-form .cancel-btn { padding: 0.5rem 1rem; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .form-message { margin-top: 0.5rem; font-size: 0.85rem; }
+        .form-message.error { color: #dc3545; }
+        .form-message.success { color: #28a745; }
+        .users-loading, .users-error { padding: 1.5rem; text-align: center; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="users-page dashboard-page">
+        <header class="users-header dashboard-header">
+            <h1>Manage Users</h1>
+            <a href="../" class="back-link">← Back to Dashboard</a>
+        </header>
+
+        <div id="content">
+            <div class="users-loading">Loading users…</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const contentEl = document.getElementById('content');
+            // Same base logic as dashboard: strip /dashboard or /dashboard/... to get app root
+            const path = window.location.pathname.replace(/\/$/, '') || '/';
+            const base = path.indexOf('/dashboard') !== -1 ? path.substring(0, path.indexOf('/dashboard')) : '';
+
+            function redirectToLogin() {
+                window.location.href = base + '/dashboard/login/?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+            }
+
+            function setContent(html) {
+                contentEl.innerHTML = html;
+            }
+
+            function fetchWithTimeout(url, options, ms) {
+                return Promise.race([
+                    fetch(url, options),
+                    new Promise(function(_, reject) {
+                        setTimeout(function() { reject(new Error('Request timed out')); }, ms);
+                    })
+                ]);
+            }
+
+            async function loadUsers() {
+                const url = base + '/api/staff';
+                try {
+                    const res = await fetchWithTimeout(url, { credentials: 'include' }, 15000);
+                    const data = await res.json().catch(function() { return {}; });
+                    if (res.status === 401) {
+                        redirectToLogin();
+                        return;
+                    }
+                    if (!res.ok) {
+                        setContent('<div class="users-error">' + (data.error || 'Request failed') + '. <a href="../">Back to Dashboard</a></div>');
+                        return;
+                    }
+                    if (!Array.isArray(data)) {
+                        setContent('<div class="users-error">Unexpected response. <a href="../">Back to Dashboard</a></div>');
+                        return;
+                    }
+                    renderUsers(data);
+                } catch (e) {
+                    setContent('<div class="users-error">' + (e.message || 'Failed to load users') + '. <a href="../">Back to Dashboard</a></div>');
+                }
+            }
+
+            function roleClass(r) { return r === 'admin' ? 'role-admin' : r === 'staff' ? 'role-staff' : 'role-volunteer'; }
+
+            function renderUsers(list) {
+                if (!list || list.length === 0) {
+                    setContent('<div class="users-loading">No users found.</div>');
+                    return;
+                }
+                setContent('<div class="feedback-card"><table class="users-table"><thead><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr></thead><tbody>' +
+                    list.map(function(u) {
+                        const created = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+                        return '<tr data-id="' + u.id + '">' +
+                            '<td><span class="username-text">' + (u.username || '—') + '</span></td>' +
+                            '<td><span class="role-badge ' + roleClass(u.role) + '">' + (u.role || 'staff') + '</span></td>' +
+                            '<td>' + created + '</td>' +
+                            '<td><button type="button" class="edit-btn" data-id="' + u.id + '">Edit</button></td>' +
+                            '</tr>' +
+                            '<tr class="edit-row" data-for="' + u.id + '" style="display:none;"><td colspan="4"><div class="edit-form" id="edit-form-' + u.id + '">' +
+                            '<div class="form-group"><label>Username</label><input type="text" class="edit-username" value="' + (u.username || '').replace(/"/g, '&quot;') + '"></div>' +
+                            '<div class="form-group"><label>Role</label><select class="edit-role">' +
+                            '<option value="volunteer"' + (u.role === 'volunteer' ? ' selected' : '') + '>Volunteer</option>' +
+                            '<option value="staff"' + (u.role === 'staff' ? ' selected' : '') + '>Staff</option>' +
+                            '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Admin</option></select></div>' +
+                            '<div class="form-group"><label>New password (leave blank to keep)</label><input type="password" class="edit-password" placeholder="Optional"></div>' +
+                            '<div class="form-actions"><button type="button" class="save-btn">Save</button><button type="button" class="cancel-btn">Cancel</button></div>' +
+                            '<p class="form-message" id="msg-' + u.id + '"></p></div></td></tr>';
+                    }).join('') + '</tbody></table></div>');
+
+                contentEl.querySelectorAll('.edit-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        const id = btn.getAttribute('data-id');
+                        const row = contentEl.querySelector('.edit-row[data-for="' + id + '"]');
+                        const form = document.getElementById('edit-form-' + id);
+                        row.style.display = row.style.display === 'none' ? '' : 'none';
+                        form.classList.toggle('visible', row.style.display !== 'none');
+                    });
+                });
+
+                contentEl.querySelectorAll('.cancel-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function() {
+                        const form = btn.closest('.edit-form');
+                        const row = form.closest('.edit-row');
+                        row.style.display = 'none';
+                        form.classList.remove('visible');
+                    });
+                });
+
+                contentEl.querySelectorAll('.save-btn').forEach(function(btn) {
+                    btn.addEventListener('click', async function() {
+                        const form = btn.closest('.edit-form');
+                        const id = form.id.replace('edit-form-', '');
+                        const msgEl = document.getElementById('msg-' + id);
+                        const username = form.querySelector('.edit-username').value.trim();
+                        const role = form.querySelector('.edit-role').value;
+                        const password = form.querySelector('.edit-password').value;
+                        msgEl.textContent = '';
+                        msgEl.className = 'form-message';
+                        if (!username) { msgEl.textContent = 'Username is required.'; msgEl.classList.add('error'); return; }
+                        if (password.length > 0 && password.length < 6) { msgEl.textContent = 'Password must be at least 6 characters.'; msgEl.classList.add('error'); return; }
+                        const body = { username: username, role: role };
+                        if (password) body.password = password;
+                        try {
+                            const res = await fetch(base + '/api/staff/' + id, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify(body)
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                                msgEl.textContent = 'Saved.';
+                                msgEl.classList.add('success');
+                                var tr = form.closest('tr');
+                                var prev = tr.previousElementSibling;
+                                prev.querySelector('.username-text').textContent = username;
+                                prev.querySelector('.role-badge').textContent = role;
+                                prev.querySelector('.role-badge').className = 'role-badge ' + roleClass(role);
+                                form.querySelector('.edit-password').value = '';
+                                setTimeout(function() { tr.style.display = 'none'; form.classList.remove('visible'); msgEl.textContent = ''; }, 1500);
+                            } else {
+                                msgEl.textContent = data.error || 'Failed to save.';
+                                msgEl.classList.add('error');
+                            }
+                        } catch (e) {
+                            msgEl.textContent = 'Request failed.';
+                            msgEl.classList.add('error');
+                        }
+                    });
+                });
+            }
+
+            loadUsers();
+        });
+    </script>
+</body>
+</html>
