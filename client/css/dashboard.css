@@ -3,6 +3,10 @@
 
 * { box-sizing: border-box; font-family: "Quicksand", sans-serif; }
 
+body {
+    padding: 2rem;
+}
+
 .dashboard-page {
     min-height: 100vh;
     background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
@@ -63,6 +67,8 @@
 }
 .dashboard-menu-btn:hover { background: #0099d4; }
 .dashboard-menu-btn[aria-expanded="true"] { background: #0099d4; }
+
+
 
 /* Mobile/tablet: show menu button, collapse user-bar into full-width dropdown */
 @media (max-width: 767px) {
