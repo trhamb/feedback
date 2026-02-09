@@ -309,8 +309,15 @@ body {
         font-size: 1.75rem;
     }
 
+    .form-wrap {
+        width: 100%;
+    }
+
     .feedback-form {
         padding: 2rem;
+        width: 50%;
+        max-width: 1000px;
+        margin: 0 auto;
     }
 
     .star-rating {
