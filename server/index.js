@@ -15,9 +15,15 @@ const PORT = Number(process.env.PORT) || 3001;
 app.set('trust proxy', 1);
 
 // Secret key for signing feedback links
-// IMPORTANT: Change this to a secure random string in production!
-// You can generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-const LINK_SECRET = process.env.LINK_SECRET || 'change-this-secret-in-production-abc123';
+// IMPORTANT: Set LINK_SECRET in production (e.g. in .env). Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+const DEFAULT_SECRET = 'change-this-secret-in-production-abc123';
+const LINK_SECRET = process.env.LINK_SECRET || DEFAULT_SECRET;
+if (process.env.NODE_ENV === 'production' && (LINK_SECRET === DEFAULT_SECRET || !process.env.LINK_SECRET)) {
+    console.error('FATAL: Set LINK_SECRET in production. Do not use the default secret.');
+    process.exit(1);
+} else if (LINK_SECRET === DEFAULT_SECRET) {
+    console.warn('Security: LINK_SECRET is default. Set LINK_SECRET in production.');
+}
 
 // Staff dashboard session (signed cookie)
 const STAFF_COOKIE_NAME = 'staff_session';
@@ -199,8 +205,10 @@ function hasRole(user, ...roles) {
     return user && roles.includes(user.role);
 }
 
-function clearStaffCookie(res) {
-    res.clearCookie(STAFF_COOKIE_NAME, { path: '/', httpOnly: true });
+function clearStaffCookie(res, req) {
+    const opts = { path: '/', httpOnly: true, sameSite: 'lax' };
+    if (cookieSecure(req)) opts.secure = true;
+    res.clearCookie(STAFF_COOKIE_NAME, opts);
 }
 
 // Dashboard page protection: require staff or admin (volunteers cannot access dashboard)
@@ -213,7 +221,7 @@ app.use((req, res, next) => {
     if (req.path === '/dashboard') return res.redirect(301, '/dashboard/');
     const staff = getAuthenticatedStaff(req);
     if (!staff) {
-        clearStaffCookie(res);
+        clearStaffCookie(res, req);
         return res.redirect('/dashboard/login/?redirect=' + encodeURIComponent(req.originalUrl || '/dashboard/'));
     }
     // Only staff and admin can access dashboard; admin-only routes
@@ -263,7 +271,7 @@ app.post('/api/staff/logout', (req, res) => {
 app.post('/api/staff', (req, res) => {
     const staff = getAuthenticatedStaff(req);
     if (!staff) {
-        clearStaffCookie(res);
+        clearStaffCookie(res, req);
         return res.status(401).json({ error: 'Authentication required' });
     }
     if (!hasRole(staff, 'admin')) return res.status(403).json({ error: 'Admin role required' });
@@ -441,13 +449,16 @@ app.get("/api/feedback", (req, res) => {
     }
     const staff = getAuthenticatedStaff(req);
     if (!staff) {
-        clearStaffCookie(res);
+        clearStaffCookie(res, req);
         return res.status(401).json({ error: 'Authentication required' });
     }
     if (!hasRole(staff, 'staff', 'admin')) return res.status(403).json({ error: 'Staff or admin role required' });
     const rows = db.prepare("SELECT id, event_name, rating, comment, created_at FROM feedback ORDER BY created_at DESC").all();
     res.json(rows);
 });
+
+const MAX_EVENT_NAME_LENGTH = 500;
+const MAX_COMMENT_LENGTH = 2000;
 
 app.post("/api/feedback", (req, res) => {
     const { event_name, rating, comment, token } = req.body;
@@ -460,12 +471,23 @@ app.post("/api/feedback", (req, res) => {
         return res.status(400).json({ error: "rating must be between 1 and 5" });
     }
     
+    const trimmedEvent = typeof event_name === 'string' ? event_name.trim() : String(event_name || '').trim();
+    if (!trimmedEvent) {
+        return res.status(400).json({ error: "event_name is required" });
+    }
+    if (trimmedEvent.length > MAX_EVENT_NAME_LENGTH) {
+        return res.status(400).json({ error: "event_name is too long" });
+    }
+    if (typeof comment === 'string' && comment.length > MAX_COMMENT_LENGTH) {
+        return res.status(400).json({ error: "comment is too long" });
+    }
+    
     const isLinkSubmission = token !== undefined;
 
     // Verify token for external (link) submissions
     if (isLinkSubmission) {
         try {
-            if (!verifyToken(event_name, token)) {
+            if (!verifyToken(trimmedEvent, token)) {
                 return res.status(403).json({ error: "Invalid or expired feedback link" });
             }
         } catch (error) {
@@ -477,7 +499,7 @@ app.post("/api/feedback", (req, res) => {
         const ipHash = hashIp(ip);
         const existing = db.prepare(
             "SELECT 1 FROM feedback WHERE event_name = ? AND ip_hash = ? AND created_at > datetime('now', '-24 hours') LIMIT 1"
-        ).get(event_name, ipHash);
+        ).get(trimmedEvent, ipHash);
         if (existing) {
             return res.status(403).json({ error: "You have already submitted feedback for this event." });
         }
@@ -486,7 +508,7 @@ app.post("/api/feedback", (req, res) => {
     try {
         const ipHash = isLinkSubmission ? hashIp(getClientIp(req)) : null;
         const stmt = db.prepare("INSERT INTO feedback (event_name, rating, comment, ip_hash) VALUES (?, ?, ?, ?)");
-        const result = stmt.run(event_name, rating, comment || null, ipHash);
+        const result = stmt.run(trimmedEvent, rating, (typeof comment === 'string' ? comment : null) || null, ipHash);
         res.json({ success: true, id: result.lastInsertRowid });
     } catch (error) {
         res.status(500).json({ error: "Failed to save feedback" });
