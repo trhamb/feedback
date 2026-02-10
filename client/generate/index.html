@@ -156,7 +156,7 @@
     </style>
 </head>
 <body>
-    <div class="page-container">
+    <div class="page-container" role="main">
         <a href="/" class="back-link">&larr; Back to Home</a>
         
         <header class="page-header">
@@ -166,7 +166,7 @@
         </header>
         
         <div class="generator-form">
-            <form id="generator-form">
+            <form id="generator-form" aria-describedby="error-message">
                 <div class="form-group">
                     <label for="event-name">Event Name</label>
                     <input type="text" id="event-name" name="event_name" 
@@ -174,12 +174,13 @@
                 </div>
                 
                 <button type="submit" class="generate-btn" id="generate-btn">Generate Link</button>
-                <div id="error-message" class="error-message"></div>
+                <div id="error-message" class="error-message" role="alert" aria-live="assertive"></div>
             </form>
             
             <div id="result-section" class="result-section">
                 <h3>Shareable Feedback Link:</h3>
                 <div class="link-container">
+                    <label for="generated-link" class="visually-hidden">Generated feedback link URL</label>
                     <input type="text" id="generated-link" class="link-input" readonly>
                     <button type="button" id="copy-btn" class="copy-btn">Copy Link</button>
                 </div>

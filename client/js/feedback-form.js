@@ -46,10 +46,10 @@ class FeedbackForm {
                 `}
                 
                 <div class="form-group">
-                    <label>Rating</label>
-                    <div class="star-rating" id="star-rating">
+                    <label id="rating-label" for="rating-value">Rating</label>
+                    <div class="star-rating" id="star-rating" role="radiogroup" aria-labelledby="rating-label">
                         ${[1, 2, 3, 4, 5].map(num => `
-                            <span class="star" data-rating="${num}" title="${num} star${num > 1 ? 's' : ''}">★</span>
+                            <span class="star" role="radio" tabindex="0" aria-checked="false" data-rating="${num}" title="${num} star${num > 1 ? 's' : ''}">★</span>
                         `).join('')}
                     </div>
                     <input type="hidden" id="rating-value" name="rating" value="" required>
@@ -67,7 +67,7 @@ class FeedbackForm {
                 </button>
             </form>
             
-            <div id="form-message" class="form-message"></div>
+            <div id="form-message" class="form-message" aria-live="polite" role="status"></div>
         `;
     }
 
@@ -78,6 +78,13 @@ class FeedbackForm {
             star.addEventListener('click', (e) => this.setRating(parseInt(e.target.dataset.rating)));
             star.addEventListener('mouseenter', (e) => this.highlightStars(parseInt(e.target.dataset.rating)));
             star.addEventListener('mouseleave', () => this.highlightStars(this.rating));
+            star.addEventListener('keydown', (e) => {
+                const key = e.key;
+                if (key === 'Enter' || key === ' ') {
+                    e.preventDefault();
+                    this.setRating(parseInt(e.target.dataset.rating));
+                }
+            });
         });
 
         // Form submission
@@ -121,11 +128,19 @@ class FeedbackForm {
 
         if (!eventName) {
             this.showMessage('Please enter an event name.', 'error');
+            const eventInput = this.container.querySelector('#event-name');
+            if (eventInput) {
+                eventInput.focus();
+            }
             return;
         }
 
         if (!rating) {
             this.showMessage('Please select a rating.', 'error');
+            const ratingGroup = this.container.querySelector('#star-rating');
+            if (ratingGroup) {
+                ratingGroup.focus();
+            }
             return;
         }
 
@@ -212,6 +227,8 @@ class FeedbackForm {
         messageEl.textContent = message;
         messageEl.className = `form-message ${type}`;
         messageEl.style.display = 'block';
+        messageEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        messageEl.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
         
         if (type === 'success') {
             setTimeout(() => {
