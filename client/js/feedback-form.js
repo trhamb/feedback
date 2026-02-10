@@ -47,9 +47,10 @@ class FeedbackForm {
                 
                 <div class="form-group">
                     <label id="rating-label" for="rating-value">Rating</label>
-                    <div class="star-rating" id="star-rating" role="radiogroup" aria-labelledby="rating-label">
+                    <div class="star-rating" id="star-rating" role="radiogroup" aria-labelledby="rating-label" tabindex="0" aria-describedby="rating-hint">
+                        <span id="rating-hint" class="visually-hidden">Use arrow keys to choose 1 to 5 stars. Press Enter or Space to confirm.</span>
                         ${[1, 2, 3, 4, 5].map(num => `
-                            <span class="star" role="radio" tabindex="0" aria-checked="false" data-rating="${num}" title="${num} star${num > 1 ? 's' : ''}">★</span>
+                            <span class="star" id="star-${num}" role="radio" tabindex="-1" aria-checked="false" aria-posinset="${num}" aria-setsize="5" aria-label="${num} star${num > 1 ? 's' : ''}" data-rating="${num}">★</span>
                         `).join('')}
                     </div>
                     <input type="hidden" id="rating-value" name="rating" value="" required>
@@ -72,19 +73,58 @@ class FeedbackForm {
     }
 
     attachEventListeners() {
-        // Star rating click handlers
+        const ratingGroup = this.container.querySelector('#star-rating');
         const stars = this.container.querySelectorAll('.star');
+
+        // Click and hover on stars
         stars.forEach(star => {
-            star.addEventListener('click', (e) => this.setRating(parseInt(e.target.dataset.rating)));
+            star.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.setRating(parseInt(e.currentTarget.dataset.rating));
+                ratingGroup.setAttribute('aria-activedescendant', 'star-' + this.rating);
+            });
             star.addEventListener('mouseenter', (e) => this.highlightStars(parseInt(e.target.dataset.rating)));
             star.addEventListener('mouseleave', () => this.highlightStars(this.rating));
-            star.addEventListener('keydown', (e) => {
-                const key = e.key;
-                if (key === 'Enter' || key === ' ') {
-                    e.preventDefault();
-                    this.setRating(parseInt(e.target.dataset.rating));
+        });
+
+        // Single tab stop: keyboard on the radiogroup (arrows, Enter, Space)
+        ratingGroup.addEventListener('keydown', (e) => {
+            const key = e.key;
+            let newRating = this.rating;
+            if (key === 'ArrowRight' || key === 'ArrowDown') {
+                e.preventDefault();
+                newRating = Math.min(5, (this.rating || 0) + 1);
+                this.setRating(newRating);
+                ratingGroup.setAttribute('aria-activedescendant', 'star-' + newRating);
+            } else if (key === 'ArrowLeft' || key === 'ArrowUp') {
+                e.preventDefault();
+                newRating = Math.max(1, (this.rating || 1) - 1);
+                this.setRating(newRating);
+                ratingGroup.setAttribute('aria-activedescendant', 'star-' + newRating);
+            } else if (key === 'Home') {
+                e.preventDefault();
+                this.setRating(1);
+                ratingGroup.setAttribute('aria-activedescendant', 'star-1');
+            } else if (key === 'End') {
+                e.preventDefault();
+                this.setRating(5);
+                ratingGroup.setAttribute('aria-activedescendant', 'star-5');
+            } else if (key === 'Enter' || key === ' ') {
+                e.preventDefault();
+                if (!this.rating) {
+                    this.setRating(1);
+                    ratingGroup.setAttribute('aria-activedescendant', 'star-1');
                 }
-            });
+            }
+        });
+
+        // When the group receives focus, sync activedescendant so NVDA reads the current option (e.g. "3 of 5")
+        ratingGroup.addEventListener('focus', () => {
+            const r = this.rating || 1;
+            ratingGroup.setAttribute('aria-activedescendant', 'star-' + r);
+        });
+        ratingGroup.addEventListener('blur', () => {
+            if (!this.rating) this.highlightStars(0);
         });
 
         // Form submission
@@ -101,11 +141,10 @@ class FeedbackForm {
     highlightStars(rating) {
         const stars = this.container.querySelectorAll('.star');
         stars.forEach((star, index) => {
-            if (index < rating) {
-                star.classList.add('active');
-            } else {
-                star.classList.remove('active');
-            }
+            const value = index + 1;
+            const active = value <= rating;
+            star.classList.toggle('active', active);
+            star.setAttribute('aria-checked', active && value === rating ? 'true' : 'false');
         });
     }
 
