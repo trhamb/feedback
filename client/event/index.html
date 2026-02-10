@@ -104,7 +104,7 @@
     </style>
 </head>
 <body>
-    <div class="page-container">
+    <div class="page-container" role="main">
         <header class="page-header">
             <img src="../img/sswlogo.png" alt="SSW Logo">
             <h1 id="page-title">Event Feedback</h1>
@@ -173,13 +173,19 @@
             
             function showSuccess() {
                 contentArea.innerHTML = `
-                    <div class="success-state">
-                        <div class="success-icon">✓</div>
+                    <div class="success-state" role="status" aria-live="assertive" tabindex="-1">
+                        <div class="success-icon" aria-hidden="true">✓</div>
                         <h2>Thank You!</h2>
                         <p>Your feedback has been submitted successfully.</p>
                         <p>We appreciate you taking the time to share your experience.</p>
                     </div>
                 `;
+
+                // Move focus to the success message so screen readers announce it
+                const successEl = contentArea.querySelector('.success-state');
+                if (successEl) {
+                    successEl.focus();
+                }
             }
         });
     </script>
